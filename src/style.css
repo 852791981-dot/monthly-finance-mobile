@@ -396,6 +396,137 @@ h1 {
   color: #f2dfbd;
   font-size: 12px;
 }
+.channellist,
+.savinghistory {
+  background: #fff;
+  border: 1px solid #e5e4df;
+  border-radius: 18px;
+  padding: 18px;
+  margin-top: 14px;
+}
+.channellist h3,
+.savinghistory h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.channellist .row,
+.savinghistory .row {
+  margin-bottom: 10px;
+}
+.channellist .row small,
+.savinghistory .row small {
+  color: #929995;
+  font-size: 11px;
+}
+.channelrow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 38px 1fr auto 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 0;
+  border: 0;
+  border-top: 1px solid #f0ece9;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+}
+.channelrow > span:nth-child(2) {
+  min-width: 0;
+}
+.channelrow b,
+.channelrow small {
+  display: block;
+}
+.channelrow small {
+  margin-top: 4px;
+  color: #8a928f;
+  font-size: 11px;
+}
+.channelrow > strong {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.channelrow > svg {
+  width: 17px;
+  color: #b69588;
+}
+.channelicon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #fff1e8;
+  color: #9f211a;
+}
+.channelicon svg {
+  width: 18px;
+}
+.savingdetailhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0 14px;
+}
+.savingdetailhead button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #eadfd9;
+  border-radius: 50%;
+  background: #fff;
+  color: #781b16;
+}
+.savingdetailhead button svg {
+  width: 20px;
+}
+.savingdetailhead h2 {
+  margin: 2px 0 0;
+}
+.savingdetailhero {
+  margin-bottom: 14px;
+}
+.savinghistoryrow {
+  display: grid;
+  grid-template-columns: 14px 1fr auto 30px;
+  align-items: center;
+  gap: 9px;
+  padding: 15px 0;
+  border-top: 1px solid #f0ece9;
+}
+.savinghistoryrow > i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d99a2b;
+  box-shadow: 0 0 0 4px #fff1cf;
+}
+.savinghistoryrow b,
+.savinghistoryrow small {
+  display: block;
+}
+.savinghistoryrow small {
+  margin-top: 4px;
+  color: #838c88;
+  font-size: 11px;
+}
+.savinghistoryrow > strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.savinghistoryrow .icon svg {
+  width: 17px;
+}
+.channelzero {
+  padding: 35px 15px;
+  text-align: center;
+  color: #7d8883;
+}
+.channelzero svg {
+  width: 38px;
+}
 .listrow {
   display: flex;
   align-items: center;
@@ -493,6 +624,23 @@ h1 {
 }
 .autobalance strong {
   font-size: 19px;
+}
+.selectedchannel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  margin: 12px 0;
+  border-radius: 14px;
+  background: #fff1e8;
+}
+.selectedchannel span {
+  color: #9a6759;
+  font-size: 11px;
+}
+.selectedchannel strong {
+  color: #681713;
+  font-size: 17px;
 }
 .field span {
   display: block;

@@ -51,6 +51,7 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [showAllTrends, setShowAllTrends] = useState(false);
+  const [savingChannelId, setSavingChannelId] = useState("");
   const [onboard, setOnboard] = useState(false);
   useEffect(() => {
     load().then((d) => {
@@ -301,7 +302,10 @@ export default function App() {
           <SavingPage
             data={data}
             month={month}
-            open={setDrawer}
+            openSaving={(channelId) => {
+              setSavingChannelId(channelId);
+              setDrawer("saving");
+            }}
             remove={remove}
           />
         )}{" "}
@@ -388,6 +392,7 @@ export default function App() {
                 kind={drawer}
                 items={cats(drawer)}
                 latest={latest}
+                selectedId={drawer === "saving" ? savingChannelId : undefined}
               />
             )}{" "}
             {drawer === "loanPlan" && (
@@ -545,12 +550,14 @@ function BalanceFields({
   kind,
   items,
   latest,
+  selectedId,
 }: {
   kind: "saving" | "bank";
   items: any[];
   latest: (k: "saving" | "bank", id: string) => number;
+  selectedId?: string;
 }) {
-  const firstId = items.find((x) => x.active)?.id || "";
+  const firstId = selectedId || items.find((x) => x.active)?.id || "";
   const [id, setId] = useState(firstId);
   const [bankOpening, setBankOpening] = useState(
     String(latest("bank", firstId)),
@@ -614,22 +621,30 @@ function BalanceFields({
   }
   return (
     <>
-      <label className="field">
-        <span>储蓄渠道</span>
-        <select
-          name="channelId"
-          value={id}
-          onChange={(e) => setId(e.target.value)}
-        >
-          {items
-            .filter((x) => x.active)
-            .map((x) => (
-              <option value={x.id} key={x.id}>
-                {x.name}
-              </option>
-            ))}
-        </select>
-      </label>
+      {selectedId ? (
+        <div className="selectedchannel">
+          <span>正在更新</span>
+          <strong>{items.find((x) => x.id === id)?.name || "储蓄渠道"}</strong>
+          <input type="hidden" name="channelId" value={id} />
+        </div>
+      ) : (
+        <label className="field">
+          <span>储蓄渠道</span>
+          <select
+            name="channelId"
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+          >
+            {items
+              .filter((x) => x.active)
+              .map((x) => (
+                <option value={x.id} key={x.id}>
+                  {x.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      )}
       <Field
         label="月初余额（自动延续）"
         name="opening"
@@ -1179,20 +1194,21 @@ function ExpensePage({
 function SavingPage({
   data,
   month,
-  open,
+  openSaving,
   remove,
 }: {
   data: AppData;
   month: string;
-  open: (x: Drawer) => void;
+  openSaving: (channelId: string) => void;
   remove: any;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const s = summary(data, month),
     year = month.slice(0, 4),
     annual = data.savingRecords
       .filter((x) => x.month.startsWith(year))
       .reduce((a, x) => a + x.added - x.reduced, 0),
-    rows = data.categories
+    channels = data.categories
       .filter((x) => x.kind === "saving" && x.active)
       .map((c) => {
         const r = data.savingRecords
@@ -1200,14 +1216,85 @@ function SavingPage({
           .sort((a, b) => b.month.localeCompare(a.month))[0];
         return {
           id: c.id,
-          main: c.name,
-          sub: r
+          name: c.name,
+          status: r
             ? `${monthLabel(r.month)} 更新${r.manual ? " · 手动调整" : ""}`
             : "尚未记录",
-          amount: r?.closing || 0,
-          type: "savingRecords",
+          balance: r?.closing || 0,
         };
       });
+  const selected = channels.find((x) => x.id === selectedId);
+  if (selected) {
+    const history = data.savingRecords
+        .filter((x) => x.channelId === selected.id && x.month <= month)
+        .sort((a, b) => b.month.localeCompare(a.month)),
+      currentRecord = history[0],
+      thisMonth = history.find((x) => x.month === month),
+      netChange = thisMonth ? thisMonth.added - thisMonth.reduced : 0;
+    return (
+      <>
+        <div className="savingdetailhead">
+          <button onClick={() => setSelectedId(null)} aria-label="返回储蓄渠道">
+            <ChevronLeft />
+          </button>
+          <div>
+            <small>储蓄渠道明细</small>
+            <h2>{selected.name}</h2>
+          </div>
+        </div>
+        <section className="savinghero savingdetailhero">
+          <small>截至 {monthLabel(month)} 的余额</small>
+          <strong>{money(currentRecord?.closing || 0)}</strong>
+          <div>
+            <span>本月净变化 {money(netChange)}</span>
+            <span>共更新 {history.length} 次</span>
+          </div>
+        </section>
+        <Quick onClick={() => openSaving(selected.id)}>
+          更新 {monthLabel(month)}
+        </Quick>
+        <section className="savinghistory">
+          <div className="row">
+            <h3>历史存入记录</h3>
+            <small>由近到远</small>
+          </div>
+          {history.length ? (
+            history.map((record) => {
+              const change = record.added - record.reduced;
+              return (
+                <div className="savinghistoryrow" key={record.id}>
+                  <i />
+                  <div>
+                    <b>{monthLabel(record.month)}</b>
+                    <small>
+                      {record.manual
+                        ? "手动调整月末余额"
+                        : change >= 0
+                          ? `存入 ${money(change)}`
+                          : `取出 ${money(Math.abs(change))}`}
+                    </small>
+                  </div>
+                  <strong>{money(record.closing)}</strong>
+                  <button
+                    className="icon danger"
+                    aria-label={`删除${monthLabel(record.month)}记录`}
+                    onClick={() => remove("savingRecords", record.id)}
+                  >
+                    <Trash2 />
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <div className="channelzero">
+              <PiggyBank />
+              <p>这个渠道还没有记录，点击上方按钮更新本月。</p>
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
   return (
     <>
       <div className="pagehead">
@@ -1215,7 +1302,6 @@ function SavingPage({
           <small>资产积累</small>
           <h2>我的储蓄</h2>
         </div>
-        <Quick onClick={() => open("saving")}>更新渠道</Quick>
       </div>
       <section className="savinghero">
         <small>当前储蓄总额</small>
@@ -1225,22 +1311,30 @@ function SavingPage({
           <span>本年净新增 {money(annual)}</span>
         </div>
       </section>
-      <List title="各渠道余额" rows={rows} remove={() => {}} />
-      <List
-        title="本月储蓄更新"
-        rows={data.savingRecords
-          .filter((x) => x.month === month)
-          .map((x) => ({
-            id: x.id,
-            main:
-              data.categories.find((c) => c.id === x.channelId)?.name ||
-              "储蓄渠道",
-            sub: `新增 ${money(x.added)} · 减少 ${money(x.reduced)}`,
-            amount: x.closing,
-            type: "savingEntry",
-          }))}
-        remove={(_, id) => remove("savingRecords", id)}
-      />
+      <section className="channellist">
+        <div className="row">
+          <h3>各渠道余额</h3>
+          <small>点击查看明细</small>
+        </div>
+        {channels.map((channel) => (
+          <button
+            className="channelrow"
+            key={channel.id}
+            onClick={() => setSelectedId(channel.id)}
+          >
+            <span className="channelicon">
+              <PiggyBank />
+            </span>
+            <span>
+              <b>{channel.name}</b>
+              <small>{channel.status}</small>
+            </span>
+            <strong>{money(channel.balance)}</strong>
+            <ChevronRight />
+          </button>
+        ))}
+        {!channels.length && <p className="muted">请先在设置中添加储蓄渠道</p>}
+      </section>
       <div className="panel">
         <h3>最近 12 个月储蓄趋势</h3>
         <Bars
