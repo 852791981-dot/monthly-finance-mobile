@@ -1,0 +1,31 @@
+{
+  "name": "monthly-finance",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest",
+    "idb": "latest",
+    "xlsx": "latest",
+    "vite-plugin-pwa": "latest"
+    ,"@openai/sites-vite-plugin": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "vitest": "latest",
+    "jsdom": "latest",
+    "prettier": "latest"
+  }
+}
