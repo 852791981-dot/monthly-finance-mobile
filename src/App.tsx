@@ -184,11 +184,9 @@ export default function App() {
         const id = String(f.get("channelId")),
           opening = num(f.get("opening")),
           deposit = num(f.get("added")),
-          repayment = num(f.get("reduced")),
-          manual = f.get("manual") === "on",
-          closing = manual
-            ? num(f.get("closing"))
-            : opening + deposit - repayment;
+          repayment = 0,
+          manual = false,
+          closing = opening + deposit;
         d.bankRecords = d.bankRecords.filter(
           (x) => !(x.month === month && x.bankId === id),
         );
@@ -552,11 +550,72 @@ function BalanceFields({
   items: any[];
   latest: (k: "saving" | "bank", id: string) => number;
 }) {
-  const [id, setId] = useState(items[0]?.id || "");
+  const firstId = items.find((x) => x.active)?.id || "";
+  const [id, setId] = useState(firstId);
+  const [bankOpening, setBankOpening] = useState(
+    String(latest("bank", firstId)),
+  );
+  const [bankMovement, setBankMovement] = useState("0");
+  if (kind === "bank") {
+    return (
+      <>
+        <label className="field">
+          <span>银行卡</span>
+          <select
+            name="channelId"
+            value={id}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setId(nextId);
+              setBankOpening(String(latest("bank", nextId)));
+              setBankMovement("0");
+            }}
+          >
+            {items
+              .filter((x) => x.active)
+              .map((x) => (
+                <option value={x.id} key={x.id}>
+                  {x.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>月初余额（自动延续）</span>
+          <input
+            name="opening"
+            type="number"
+            min="0"
+            step="0.01"
+            value={bankOpening}
+            onChange={(e) => setBankOpening(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>本月转入 / 转出（转出请填负数）</span>
+          <input
+            name="added"
+            type="number"
+            step="0.01"
+            value={bankMovement}
+            onChange={(e) => setBankMovement(e.target.value)}
+          />
+        </label>
+        <div className="autobalance">
+          <span>
+            月末余额 <small>自动计算</small>
+          </span>
+          <strong>
+            {money((Number(bankOpening) || 0) + (Number(bankMovement) || 0))}
+          </strong>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <label className="field">
-        <span>{kind === "saving" ? "储蓄渠道" : "银行卡"}</span>
+        <span>储蓄渠道</span>
         <select
           name="channelId"
           value={id}
@@ -577,16 +636,8 @@ function BalanceFields({
         type="number"
         value={latest(kind, id)}
       />
-      <Field
-        label={kind === "saving" ? "本月新增" : "本月转入"}
-        name="added"
-        type="number"
-      />
-      <Field
-        label={kind === "saving" ? "本月减少" : "用于还款"}
-        name="reduced"
-        type="number"
-      />
+      <Field label="本月新增" name="added" type="number" />
+      <Field label="本月减少" name="reduced" type="number" />
       <label className="check">
         <input name="manual" type="checkbox" /> 手动指定月末余额
       </label>
@@ -1052,7 +1103,7 @@ function LoanPage({
             id: x.id,
             main:
               data.categories.find((c) => c.id === x.bankId)?.name || "银行卡",
-            sub: `转入 ${money(x.deposit)} · 还款 ${money(x.repayment)}`,
+            sub: `本月变动 ${money(x.deposit - x.repayment)} · 月初 ${money(x.opening)}`,
             amount: x.closing,
             type: "bankRecords",
           }))}

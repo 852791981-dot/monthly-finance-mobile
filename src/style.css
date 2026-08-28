@@ -474,6 +474,27 @@ h1 {
   display: block;
   margin: 13px 0;
 }
+.autobalance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 15px 0;
+  padding: 15px;
+  border-radius: 14px;
+  background: #fff1e8;
+  color: #681713;
+}
+.autobalance span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.autobalance small {
+  color: #a56a5a;
+}
+.autobalance strong {
+  font-size: 19px;
+}
 .field span {
   display: block;
   font-size: 13px;
