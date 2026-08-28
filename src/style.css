@@ -228,6 +228,104 @@ h1 {
   font-size: 15px;
   margin: 0 0 15px;
 }
+.trendpanel .row h3,
+.loanbreakdown .row h3 {
+  margin-bottom: 0;
+}
+.textbutton,
+.editbutton {
+  border: 0;
+  background: #fbe7df;
+  color: #8f1d18;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 700;
+}
+.linechart {
+  margin-top: 12px;
+}
+.chartlegend {
+  display: flex;
+  gap: 18px;
+  color: #59635f;
+  font-size: 12px;
+}
+.chartlegend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chartlegend i {
+  width: 18px;
+  height: 3px;
+  border-radius: 4px;
+}
+.expenseLine {
+  background: #b42318;
+}
+.savingLine {
+  background: #167c80;
+}
+.chartscroll {
+  overflow-x: auto;
+  margin-top: 5px;
+}
+.chartscroll svg {
+  display: block;
+  min-width: 100%;
+  height: 178px;
+}
+.chartscroll text {
+  fill: #87908c;
+  font-size: 10px;
+}
+.chartgrid {
+  stroke: #eee8e4;
+  stroke-width: 1;
+}
+.expensePolyline,
+.savingPolyline {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.expensePolyline {
+  stroke: #b42318;
+}
+.savingPolyline {
+  stroke: #167c80;
+}
+.expenseDot {
+  fill: #fff;
+  stroke: #b42318;
+  stroke-width: 2.5;
+}
+.savingDot {
+  fill: #fff;
+  stroke: #167c80;
+  stroke-width: 2.5;
+}
+.chartnote {
+  margin: -4px 0 0 !important;
+  font-size: 10px !important;
+}
+.trendrows {
+  margin-top: 16px;
+  border-top: 1px solid #ece7e3;
+}
+.trendrow {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr 1fr;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0ece9;
+  font-size: 11px;
+}
+.trendrow span {
+  text-align: right;
+  color: #68716d;
+}
 .bars {
   height: 125px;
   display: flex;
@@ -334,6 +432,14 @@ h1 {
 .empty svg {
   width: 55px;
   height: 55px;
+}
+.loanempty p {
+  margin: 8px auto 18px;
+  max-width: 280px;
+}
+.loanempty .quick {
+  width: fit-content;
+  margin: auto;
 }
 .overlay {
   position: fixed;
@@ -619,6 +725,28 @@ nav .active {
 }
 .loanhero .progress {
   margin-top: 12px;
+}
+.loanbreakdown > div:not(.row) {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid #f0ece9;
+  font-size: 13px;
+}
+.loanbreakdown .row small {
+  color: #9a6b5d;
+}
+.loanbreakdown .deduct b {
+  color: #167c80;
+}
+.loanbreakdown .breaktotal {
+  border-bottom: 0 !important;
+  align-items: center;
+  color: #8f1d18;
+}
+.loanbreakdown .breaktotal strong {
+  font-size: 19px;
 }
 @media (min-width: 700px) {
   .app {

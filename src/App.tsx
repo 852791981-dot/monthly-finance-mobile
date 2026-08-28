@@ -50,6 +50,7 @@ export default function App() {
   const [month, setMonth] = useState(currentMonth());
   const [page, setPage] = useState<Page>("home");
   const [drawer, setDrawer] = useState<Drawer>(null);
+  const [showAllTrends, setShowAllTrends] = useState(false);
   const [onboard, setOnboard] = useState(false);
   useEffect(() => {
     load().then((d) => {
@@ -156,12 +157,28 @@ export default function App() {
         }
       }
       if (drawer === "loanPlan") {
-        const loan = d.loans[0];
+        let loan = d.loans[0];
+        if (!loan) {
+          loan = {
+            id: uid(),
+            name: "车贷",
+            initial: 0,
+            current: 0,
+            monthlyPlan: 0,
+            startMonth: month,
+            endMonth: "",
+            note: "",
+          };
+          d.loans.push(loan);
+        }
+        loan.name = String(f.get("loanName") || "车贷");
         loan.interestRemaining = num(f.get("interestRemaining"));
         loan.interestFreeRemaining = num(f.get("interestFreeRemaining"));
         loan.externalFunds = num(f.get("externalFunds"));
         loan.monthlyPlan = num(f.get("monthlyPlan"));
         loan.current = loan.interestRemaining + loan.interestFreeRemaining;
+        loan.initial = num(f.get("initial")) || loan.initial || loan.current;
+        loan.note = note;
       }
       if (drawer === "bank") {
         const id = String(f.get("channelId")),
@@ -260,7 +277,11 @@ export default function App() {
       )}
       <main>
         {page === "home" && (
-          <Dashboard data={data} month={month} open={setDrawer} />
+          <Dashboard
+            data={data}
+            month={month}
+            showAll={() => setShowAllTrends(true)}
+          />
         )}{" "}
         {page === "loan" && (
           <LoanPage
@@ -316,7 +337,7 @@ export default function App() {
               important: "新增重要支出",
               fuel: "更新加油费用",
               loan: "更新本月车贷",
-              loanPlan: "设置车贷资金计划",
+              loanPlan: "编辑车贷资料",
               bank: "更新银行卡",
               saving: "更新本月储蓄",
             }[drawer]
@@ -371,31 +392,43 @@ export default function App() {
                 latest={latest}
               />
             )}{" "}
-            {drawer === "loanPlan" && data.loans[0] && (
+            {drawer === "loanPlan" && (
               <>
+                <Field
+                  label="贷款名称"
+                  name="loanName"
+                  value={data.loans[0]?.name || "车贷"}
+                  required
+                />
+                <Field
+                  label="初始贷款金额"
+                  name="initial"
+                  type="number"
+                  value={data.loans[0]?.initial || 0}
+                />
                 <Field
                   label="待还（有息阶段）"
                   name="interestRemaining"
                   type="number"
-                  value={data.loans[0].interestRemaining || 0}
+                  value={data.loans[0]?.interestRemaining || 0}
                 />
                 <Field
                   label="待还（无息阶段）"
                   name="interestFreeRemaining"
                   type="number"
-                  value={data.loans[0].interestFreeRemaining || 0}
+                  value={data.loans[0]?.interestFreeRemaining || 0}
                 />
                 <Field
                   label="其他可用于还贷的资金"
                   name="externalFunds"
                   type="number"
-                  value={data.loans[0].externalFunds || 0}
+                  value={data.loans[0]?.externalFunds || 0}
                 />
                 <Field
                   label="每月计划还款"
                   name="monthlyPlan"
                   type="number"
-                  value={data.loans[0].monthlyPlan}
+                  value={data.loans[0]?.monthlyPlan || 0}
                 />
                 <p className="formhint">
                   还需攒 = 待还总额 − 还款卡余额 − 其他可用资金
@@ -418,7 +451,7 @@ export default function App() {
             )}
             <Field label="备注（可选）" name="note" />
             <button className="primary" type="submit">
-              {drawer === "loanPlan" ? "保存资金计划" : "保存本月记录"}
+              {drawer === "loanPlan" ? "保存车贷资料" : "保存本月记录"}
             </button>
           </form>
         </Drawer>
@@ -446,6 +479,15 @@ export default function App() {
           }}
         />
       )}
+      {showAllTrends && (
+        <Drawer title="完整财务趋势" close={() => setShowAllTrends(false)}>
+          <DualLineChart
+            data={data}
+            months={recordedMonths(data, month)}
+            detailed
+          />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -461,7 +503,7 @@ function Field({
   name: string;
   type?: string;
   required?: boolean;
-  value?: number;
+  value?: string | number;
 }) {
   return (
     <label className="field">
@@ -623,6 +665,132 @@ function Bars({ values }: { values: { label: string; value: number }[] }) {
     </div>
   );
 }
+function recordedMonths(data: AppData, through: string) {
+  const recorded = [
+    ...data.expenses,
+    ...data.importantExpenses,
+    ...data.fuelRecords,
+    ...data.repayments,
+    ...data.bankRecords,
+    ...data.savingRecords,
+  ]
+    .map((x) => x.month)
+    .filter((m) => m <= through)
+    .sort();
+  const first = recorded[0] || shiftMonth(through, -11);
+  const result: string[] = [];
+  for (let cursor = first; cursor <= through; cursor = shiftMonth(cursor, 1)) {
+    result.push(cursor);
+    if (result.length >= 120) break;
+  }
+  return result;
+}
+
+function DualLineChart({
+  data,
+  months,
+  detailed = false,
+}: {
+  data: AppData;
+  months: string[];
+  detailed?: boolean;
+}) {
+  const expenses = months.map((m) => summary(data, m).total);
+  const savings = months.map((m) => summary(data, m).saving);
+  const width = Math.max(320, months.length * 62);
+  const height = 178;
+  const left = 20;
+  const right = width - 20;
+  const top = 18;
+  const bottom = 132;
+  const points = (values: number[]) => {
+    const max = Math.max(...values, 1);
+    return values
+      .map((value, i) => {
+        const x =
+          months.length === 1
+            ? width / 2
+            : left + (i / (months.length - 1)) * (right - left);
+        const y = bottom - (value / max) * (bottom - top);
+        return `${x},${y}`;
+      })
+      .join(" ");
+  };
+  const point = (values: number[], value: number, i: number) => {
+    const max = Math.max(...values, 1);
+    return {
+      x:
+        months.length === 1
+          ? width / 2
+          : left + (i / (months.length - 1)) * (right - left),
+      y: bottom - (value / max) * (bottom - top),
+    };
+  };
+  return (
+    <div className="linechart">
+      <div className="chartlegend">
+        <span>
+          <i className="expenseLine" />
+          支出
+        </span>
+        <span>
+          <i className="savingLine" />
+          储蓄余额
+        </span>
+      </div>
+      <div className="chartscroll">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ width: `${width}px` }}
+          role="img"
+          aria-label="支出与储蓄趋势折线图"
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <line
+              key={i}
+              x1={left}
+              x2={right}
+              y1={top + ((bottom - top) / 3) * i}
+              y2={top + ((bottom - top) / 3) * i}
+              className="chartgrid"
+            />
+          ))}
+          <polyline points={points(expenses)} className="expensePolyline" />
+          <polyline points={points(savings)} className="savingPolyline" />
+          {months.map((m, i) => {
+            const ep = point(expenses, expenses[i], i);
+            const sp = point(savings, savings[i], i);
+            return (
+              <g key={m}>
+                <circle cx={ep.x} cy={ep.y} r="3.5" className="expenseDot">
+                  <title>{`${monthLabel(m)}支出 ${money(expenses[i])}`}</title>
+                </circle>
+                <circle cx={sp.x} cy={sp.y} r="3.5" className="savingDot">
+                  <title>{`${monthLabel(m)}储蓄 ${money(savings[i])}`}</title>
+                </circle>
+                <text x={ep.x} y="158" textAnchor="middle">
+                  {m.slice(5)}月
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <p className="chartnote">两条线按各自金额范围展示变化趋势</p>
+      {detailed && (
+        <div className="trendrows">
+          {[...months].reverse().map((m) => (
+            <div className="trendrow" key={m}>
+              <b>{monthLabel(m)}</b>
+              <span>支出 {money(summary(data, m).total)}</span>
+              <span>储蓄 {money(summary(data, m).saving)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function ExpenseStackedChart({
   data,
   month,
@@ -630,7 +798,18 @@ function ExpenseStackedChart({
   data: AppData;
   month: string;
 }) {
-  const palette = ["#b42318", "#d94841", "#e76f51", "#c2410c", "#a63d40"];
+  const palette = [
+    "#167c80",
+    "#4169a1",
+    "#7b4ca0",
+    "#2f855a",
+    "#d05c99",
+    "#64748b",
+  ];
+  const importantNames = data.categories
+    .filter((x) => x.kind === "important")
+    .sort((a, b) => a.order - b.order)
+    .map((x) => x.name);
   const months = monthsBack(month, 12).map((m) => {
     const daily = data.expenses.find((x) => x.month === m)?.amount || 0;
     const important = data.importantExpenses
@@ -647,10 +826,11 @@ function ExpenseStackedChart({
       .reduce((sum, x) => sum + x.amount, 0);
     const parts = [
       { name: "日常", value: daily, color: "#8f1d18" },
-      ...Object.entries(important).map(([name, value], i) => ({
+      ...Object.entries(important).map(([name, value]) => ({
         name,
         value,
-        color: palette[i % palette.length],
+        color:
+          palette[Math.max(0, importantNames.indexOf(name)) % palette.length],
       })),
       { name: "加油", value: fuel, color: "#d99a2b" },
     ].filter((x) => x.value > 0);
@@ -694,11 +874,11 @@ function ExpenseStackedChart({
 function Dashboard({
   data,
   month,
-  open,
+  showAll,
 }: {
   data: AppData;
   month: string;
-  open: (x: Drawer) => void;
+  showAll: () => void;
 }) {
   const s = summary(data, month),
     ms = monthsBack(month, 6),
@@ -728,26 +908,27 @@ function Dashboard({
         <Card label="当前储蓄总额" value={s.saving} tone="gold" />
         <Card label="本月新增储蓄" value={s.added} tone="gold" />
       </div>
-      <div className="panel">
-        <h3>最近 6 个月支出</h3>
-        <Bars
-          values={ms.map((m) => ({ label: m, value: summary(data, m).total }))}
-        />
-      </div>
-      <div className="panel">
-        <h3>最近 6 个月储蓄</h3>
-        <Bars
-          values={ms.map((m) => ({ label: m, value: summary(data, m).saving }))}
-        />
+      <div className="panel trendpanel">
+        <div className="row">
+          <h3>近 6 个月财务趋势</h3>
+          <button className="textbutton" onClick={showAll}>
+            查看全部
+          </button>
+        </div>
+        <DualLineChart data={data} months={ms} />
       </div>
       {loan && (
         <div className="panel">
           <div className="row">
             <h3>车贷还款进度</h3>
-            <b>{Math.round((paid / loan.initial) * 100)}%</b>
+            <b>{loan.initial ? Math.round((paid / loan.initial) * 100) : 0}%</b>
           </div>
           <div className="progress">
-            <i style={{ width: `${(paid / loan.initial) * 100}%` }} />
+            <i
+              style={{
+                width: `${loan.initial ? Math.min(100, (paid / loan.initial) * 100) : 0}%`,
+              }}
+            />
           </div>
           <p>
             {money(paid)} / {money(loan.initial)}
@@ -770,7 +951,14 @@ function LoanPage({
 }) {
   const l = data.loans[0];
   if (!l)
-    return <Empty title="还没有贷款资料" action="去设置中添加贷款基础信息" />;
+    return (
+      <div className="empty loanempty">
+        <Car />
+        <h2>还没有车贷资料</h2>
+        <p>直接在这里录入备忘录中的待还金额和资金计划。</p>
+        <Quick onClick={() => open("loanPlan")}>录入车贷资料</Quick>
+      </div>
+    );
   const totalDue =
       (l.interestRemaining || 0) + (l.interestFreeRemaining || 0) || l.current,
     bankBalance = summary(data, month).bank,
@@ -784,7 +972,9 @@ function LoanPage({
           <small>车贷账户</small>
           <h2>{l.name}</h2>
         </div>
-        <Quick onClick={() => open("loan")}>更新本月</Quick>
+        <button className="editbutton" onClick={() => open("loanPlan")}>
+          编辑资料
+        </button>
       </div>
       <div className="loanhero">
         <small>按当前资金计划，还需要攒</small>
@@ -809,10 +999,36 @@ function LoanPage({
         <Card label="还款卡余额" value={bankBalance} />
         <Card label="其他可用资金" value={l.externalFunds || 0} />
       </div>
+      <div className="panel loanbreakdown">
+        <div className="row">
+          <h3>还贷资金计算</h3>
+          <small>按备忘录方式</small>
+        </div>
+        <div>
+          <span>待还 · 有息阶段</span>
+          <b>{money(l.interestRemaining || 0)}</b>
+        </div>
+        <div>
+          <span>待还 · 无息阶段</span>
+          <b>{money(l.interestFreeRemaining || 0)}</b>
+        </div>
+        <div className="deduct">
+          <span>减：还款卡余额</span>
+          <b>− {money(bankBalance)}</b>
+        </div>
+        <div className="deduct">
+          <span>减：其他可用资金</span>
+          <b>− {money(l.externalFunds || 0)}</b>
+        </div>
+        <div className="breaktotal">
+          <span>还需要攒</span>
+          <strong>{money(fundingGap)}</strong>
+        </div>
+      </div>
       <div className="actions">
         <Quick onClick={() => open("loan")}>记本月还款</Quick>
         <Quick onClick={() => open("bank")}>更新账户余额</Quick>
-        <Quick onClick={() => open("loanPlan")}>资金计划</Quick>
+        <Quick onClick={() => open("loanPlan")}>编辑车贷资料</Quick>
       </div>
       <List
         title="还款记录"
