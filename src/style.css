@@ -228,8 +228,7 @@ h1 {
   font-size: 15px;
   margin: 0 0 15px;
 }
-.trendpanel .row h3,
-.loanbreakdown .row h3 {
+.trendpanel .row h3 {
   margin-bottom: 0;
 }
 .textbutton,
@@ -746,28 +745,6 @@ nav .active {
 }
 .loanhero .progress {
   margin-top: 12px;
-}
-.loanbreakdown > div:not(.row) {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid #f0ece9;
-  font-size: 13px;
-}
-.loanbreakdown .row small {
-  color: #9a6b5d;
-}
-.loanbreakdown .deduct b {
-  color: #167c80;
-}
-.loanbreakdown .breaktotal {
-  border-bottom: 0 !important;
-  align-items: center;
-  color: #8f1d18;
-}
-.loanbreakdown .breaktotal strong {
-  font-size: 19px;
 }
 @media (min-width: 700px) {
   .app {

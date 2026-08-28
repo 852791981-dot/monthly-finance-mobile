@@ -1015,7 +1015,9 @@ function LoanPage({
     bankBalance = summary(data, month).bank,
     fundingGap = Math.max(0, totalDue - bankBalance - (l.externalFunds || 0)),
     paid = Math.max(0, l.initial - l.current),
-    remaining = l.monthlyPlan ? Math.ceil(totalDue / l.monthlyPlan) : 0;
+    interestMonths = l.monthlyPlan
+      ? Math.ceil((l.interestRemaining || 0) / l.monthlyPlan)
+      : 0;
   return (
     <>
       <div className="pagehead">
@@ -1032,7 +1034,11 @@ function LoanPage({
         <strong>{money(fundingGap)}</strong>
         <div className="row">
           <span>待还合计 {money(totalDue)}</span>
-          <span>约剩 {remaining} 个月</span>
+          <span>
+            {interestMonths > 0
+              ? `有息阶段约剩 ${interestMonths} 个月`
+              : "有息阶段已结束"}
+          </span>
         </div>
         <div className="progress">
           <i
@@ -1049,32 +1055,6 @@ function LoanPage({
         <Card label="本月已还" value={summary(data, month).repay} />
         <Card label="还款卡余额" value={bankBalance} />
         <Card label="其他可用资金" value={l.externalFunds || 0} />
-      </div>
-      <div className="panel loanbreakdown">
-        <div className="row">
-          <h3>还贷资金计算</h3>
-          <small>按备忘录方式</small>
-        </div>
-        <div>
-          <span>待还 · 有息阶段</span>
-          <b>{money(l.interestRemaining || 0)}</b>
-        </div>
-        <div>
-          <span>待还 · 无息阶段</span>
-          <b>{money(l.interestFreeRemaining || 0)}</b>
-        </div>
-        <div className="deduct">
-          <span>减：还款卡余额</span>
-          <b>− {money(bankBalance)}</b>
-        </div>
-        <div className="deduct">
-          <span>减：其他可用资金</span>
-          <b>− {money(l.externalFunds || 0)}</b>
-        </div>
-        <div className="breaktotal">
-          <span>还需要攒</span>
-          <strong>{money(fundingGap)}</strong>
-        </div>
       </div>
       <div className="actions">
         <Quick onClick={() => open("loan")}>记本月还款</Quick>
