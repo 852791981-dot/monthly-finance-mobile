@@ -29,7 +29,14 @@ import {
 } from "./utils";
 type Page = "home" | "loan" | "expense" | "saving" | "settings";
 type Drawer =
-  "expense" | "important" | "fuel" | "loan" | "bank" | "saving" | null;
+  | "expense"
+  | "important"
+  | "fuel"
+  | "loan"
+  | "loanPlan"
+  | "bank"
+  | "saving"
+  | null;
 const labels: Record<CategoryKind, string> = {
   expense: "支出分类",
   important: "重要事项标签",
@@ -90,12 +97,11 @@ export default function App() {
         });
       }
       if (drawer === "fuel") {
-        d.fuelRecords = d.fuelRecords.filter((x) => x.month !== month);
         d.fuelRecords.push({
           id: uid(),
           month,
+          date: String(f.get("date") || ""),
           amount: num(f.get("amount")),
-          times: num(f.get("times")),
           tagId: String(f.get("tagId") || ""),
           note,
         });
@@ -130,6 +136,32 @@ export default function App() {
           note,
         });
         loan.current = after;
+        const principalDrop = Math.max(0, before - after);
+        if (
+          (loan.interestRemaining || 0) + (loan.interestFreeRemaining || 0) >
+          0
+        ) {
+          const fromInterest = Math.min(
+            loan.interestRemaining || 0,
+            principalDrop,
+          );
+          loan.interestRemaining = Math.max(
+            0,
+            (loan.interestRemaining || 0) - fromInterest,
+          );
+          loan.interestFreeRemaining = Math.max(
+            0,
+            (loan.interestFreeRemaining || 0) - (principalDrop - fromInterest),
+          );
+        }
+      }
+      if (drawer === "loanPlan") {
+        const loan = d.loans[0];
+        loan.interestRemaining = num(f.get("interestRemaining"));
+        loan.interestFreeRemaining = num(f.get("interestFreeRemaining"));
+        loan.externalFunds = num(f.get("externalFunds"));
+        loan.monthlyPlan = num(f.get("monthlyPlan"));
+        loan.current = loan.interestRemaining + loan.interestFreeRemaining;
       }
       if (drawer === "bank") {
         const id = String(f.get("channelId")),
@@ -284,6 +316,7 @@ export default function App() {
               important: "新增重要支出",
               fuel: "更新加油费用",
               loan: "更新本月车贷",
+              loanPlan: "设置车贷资金计划",
               bank: "更新银行卡",
               saving: "更新本月储蓄",
             }[drawer]
@@ -304,7 +337,7 @@ export default function App() {
             )}
             {drawer === "fuel" && (
               <>
-                <Field label="加油次数（可选）" name="times" type="number" />
+                <Field label="加油日期" name="date" type="date" required />
                 <Select label="费用标签" name="tagId" items={cats("fuel")} />
               </>
             )}
@@ -338,6 +371,37 @@ export default function App() {
                 latest={latest}
               />
             )}{" "}
+            {drawer === "loanPlan" && data.loans[0] && (
+              <>
+                <Field
+                  label="待还（有息阶段）"
+                  name="interestRemaining"
+                  type="number"
+                  value={data.loans[0].interestRemaining || 0}
+                />
+                <Field
+                  label="待还（无息阶段）"
+                  name="interestFreeRemaining"
+                  type="number"
+                  value={data.loans[0].interestFreeRemaining || 0}
+                />
+                <Field
+                  label="其他可用于还贷的资金"
+                  name="externalFunds"
+                  type="number"
+                  value={data.loans[0].externalFunds || 0}
+                />
+                <Field
+                  label="每月计划还款"
+                  name="monthlyPlan"
+                  type="number"
+                  value={data.loans[0].monthlyPlan}
+                />
+                <p className="formhint">
+                  还需攒 = 待还总额 − 还款卡余额 − 其他可用资金
+                </p>
+              </>
+            )}
             {(drawer === "expense" ||
               drawer === "important" ||
               drawer === "fuel" ||
@@ -354,7 +418,7 @@ export default function App() {
             )}
             <Field label="备注（可选）" name="note" />
             <button className="primary" type="submit">
-              保存本月记录
+              {drawer === "loanPlan" ? "保存资金计划" : "保存本月记录"}
             </button>
           </form>
         </Drawer>
@@ -559,6 +623,74 @@ function Bars({ values }: { values: { label: string; value: number }[] }) {
     </div>
   );
 }
+function ExpenseStackedChart({
+  data,
+  month,
+}: {
+  data: AppData;
+  month: string;
+}) {
+  const palette = ["#b42318", "#d94841", "#e76f51", "#c2410c", "#a63d40"];
+  const months = monthsBack(month, 12).map((m) => {
+    const daily = data.expenses.find((x) => x.month === m)?.amount || 0;
+    const important = data.importantExpenses
+      .filter((x) => x.month === m)
+      .reduce<Record<string, number>>((acc, x) => {
+        const name =
+          data.categories.find((c) => c.id === x.categoryId)?.name ||
+          "重要支出";
+        acc[name] = (acc[name] || 0) + x.amount;
+        return acc;
+      }, {});
+    const fuel = data.fuelRecords
+      .filter((x) => x.month === m)
+      .reduce((sum, x) => sum + x.amount, 0);
+    const parts = [
+      { name: "日常", value: daily, color: "#8f1d18" },
+      ...Object.entries(important).map(([name, value], i) => ({
+        name,
+        value,
+        color: palette[i % palette.length],
+      })),
+      { name: "加油", value: fuel, color: "#d99a2b" },
+    ].filter((x) => x.value > 0);
+    return { month: m, parts, total: parts.reduce((s, x) => s + x.value, 0) };
+  });
+  const max = Math.max(...months.map((x) => x.total), 1);
+  return (
+    <div className="stackscroll">
+      {months.map((item) => (
+        <div className="stackmonth" key={item.month}>
+          <b>{item.month.slice(5)}月</b>
+          <div
+            className="stacktrack"
+            style={{ height: `${Math.max(8, (item.total / max) * 112)}px` }}
+          >
+            {item.parts.map((part) => (
+              <i
+                key={part.name}
+                title={`${part.name} ${money(part.value)}`}
+                style={{
+                  background: part.color,
+                  height: `${(part.value / Math.max(item.total, 1)) * 100}%`,
+                }}
+              />
+            ))}
+          </div>
+          <strong>{money(item.total)}</strong>
+          <div className="stacklabels">
+            {item.parts.map((part) => (
+              <small key={part.name}>
+                <em style={{ background: part.color }} />
+                {part.name} {money(part.value).replace("CN¥", "¥")}
+              </small>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 function Dashboard({
   data,
   month,
@@ -585,11 +717,6 @@ function Dashboard({
           <b>{money(s.added)}</b>
         </div>
       </section>
-      <div className="quickrow">
-        <Quick onClick={() => open("expense")}>记支出</Quick>
-        <Quick onClick={() => open("saving")}>更储蓄</Quick>
-        <Quick onClick={() => open("loan")}>还车贷</Quick>
-      </div>
       <h2 className="sectiontitle">本月概览</h2>
       <div className="cards">
         <Card label="日常支出" value={s.daily} />
@@ -644,8 +771,12 @@ function LoanPage({
   const l = data.loans[0];
   if (!l)
     return <Empty title="还没有贷款资料" action="去设置中添加贷款基础信息" />;
-  const paid = l.initial - l.current,
-    remaining = l.monthlyPlan ? Math.ceil(l.current / l.monthlyPlan) : 0;
+  const totalDue =
+      (l.interestRemaining || 0) + (l.interestFreeRemaining || 0) || l.current,
+    bankBalance = summary(data, month).bank,
+    fundingGap = Math.max(0, totalDue - bankBalance - (l.externalFunds || 0)),
+    paid = Math.max(0, l.initial - l.current),
+    remaining = l.monthlyPlan ? Math.ceil(totalDue / l.monthlyPlan) : 0;
   return (
     <>
       <div className="pagehead">
@@ -656,25 +787,32 @@ function LoanPage({
         <Quick onClick={() => open("loan")}>更新本月</Quick>
       </div>
       <div className="loanhero">
-        <small>剩余贷款</small>
-        <strong>{money(l.current)}</strong>
+        <small>按当前资金计划，还需要攒</small>
+        <strong>{money(fundingGap)}</strong>
         <div className="row">
-          <span>已还 {money(paid)}</span>
+          <span>待还合计 {money(totalDue)}</span>
           <span>约剩 {remaining} 个月</span>
         </div>
         <div className="progress">
-          <i style={{ width: `${(paid / l.initial) * 100}%` }} />
+          <i
+            style={{
+              width: `${l.initial ? Math.min(100, (paid / l.initial) * 100) : 0}%`,
+            }}
+          />
         </div>
       </div>
       <div className="cards">
-        <Card label="初始贷款" value={l.initial} />
+        <Card label="待还有息部分" value={l.interestRemaining || 0} />
+        <Card label="待还无息部分" value={l.interestFreeRemaining || 0} />
         <Card label="计划月还" value={l.monthlyPlan} />
         <Card label="本月已还" value={summary(data, month).repay} />
-        <Card label="还款卡余额" value={summary(data, month).bank} />
+        <Card label="还款卡余额" value={bankBalance} />
+        <Card label="其他可用资金" value={l.externalFunds || 0} />
       </div>
       <div className="actions">
-        <Quick onClick={() => open("loan")}>更新车贷</Quick>
-        <Quick onClick={() => open("bank")}>更新银行卡</Quick>
+        <Quick onClick={() => open("loan")}>记本月还款</Quick>
+        <Quick onClick={() => open("bank")}>更新账户余额</Quick>
+        <Quick onClick={() => open("loanPlan")}>资金计划</Quick>
       </div>
       <List
         title="还款记录"
@@ -687,6 +825,20 @@ function LoanPage({
             sub: `${x.paid ? "已还" : "未还"} · 余额 ${money(x.after)}`,
             amount: x.amount,
             type: "repayments",
+          }))}
+        remove={remove}
+      />
+      <List
+        title="本月还款账户记录"
+        rows={data.bankRecords
+          .filter((x) => x.month === month)
+          .map((x) => ({
+            id: x.id,
+            main:
+              data.categories.find((c) => c.id === x.bankId)?.name || "银行卡",
+            sub: `转入 ${money(x.deposit)} · 还款 ${money(x.repayment)}`,
+            amount: x.closing,
+            type: "bankRecords",
           }))}
         remove={remove}
       />
@@ -729,14 +881,22 @@ function ExpensePage({
         <Quick onClick={() => open("fuel")}>加油费用</Quick>
       </div>
       <div className="panel">
-        <h3>最近 12 个月支出趋势</h3>
-        <Bars
-          values={monthsBack(month, 12).map((m) => ({
-            label: m,
-            value: summary(data, m).total,
-          }))}
-        />
+        <h3>最近 12 个月分类支出</h3>
+        <ExpenseStackedChart data={data} month={month} />
       </div>
+      <List
+        title="本月日常支出"
+        rows={data.expenses
+          .filter((x) => x.month === month)
+          .map((x) => ({
+            id: x.id,
+            main: "日常支出合计",
+            sub: monthLabel(x.month),
+            amount: x.amount,
+            type: "expenses",
+          }))}
+        remove={remove}
+      />
       <List
         title="本月重要支出"
         rows={data.importantExpenses
@@ -749,6 +909,20 @@ function ExpensePage({
               "已停用标签",
             amount: x.amount,
             type: "importantExpenses",
+          }))}
+        remove={remove}
+      />
+      <List
+        title="本月加油记录"
+        rows={data.fuelRecords
+          .filter((x) => x.month === month)
+          .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+          .map((x) => ({
+            id: x.id,
+            main: x.date || monthLabel(x.month),
+            sub: data.categories.find((c) => c.id === x.tagId)?.name || "加油",
+            amount: x.amount,
+            type: "fuelRecords",
           }))}
         remove={remove}
       />
@@ -805,6 +979,21 @@ function SavingPage({
         </div>
       </section>
       <List title="各渠道余额" rows={rows} remove={() => {}} />
+      <List
+        title="本月储蓄更新"
+        rows={data.savingRecords
+          .filter((x) => x.month === month)
+          .map((x) => ({
+            id: x.id,
+            main:
+              data.categories.find((c) => c.id === x.channelId)?.name ||
+              "储蓄渠道",
+            sub: `新增 ${money(x.added)} · 减少 ${money(x.reduced)}`,
+            amount: x.closing,
+            type: "savingEntry",
+          }))}
+        remove={(_, id) => remove("savingRecords", id)}
+      />
       <div className="panel">
         <h3>最近 12 个月储蓄趋势</h3>
         <Bars

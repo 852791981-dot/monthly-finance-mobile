@@ -19,6 +19,10 @@ export interface Loan {
   startMonth: string;
   endMonth: string;
   note: string;
+  reserveTarget?: number;
+  externalFunds?: number;
+  interestRemaining?: number;
+  interestFreeRemaining?: number;
 }
 export interface Repayment {
   id: string;
@@ -60,6 +64,7 @@ export interface ImportantExpense {
 export interface FuelRecord {
   id: string;
   month: Month;
+  date?: string;
   amount: number;
   times?: number;
   tagId?: string;
