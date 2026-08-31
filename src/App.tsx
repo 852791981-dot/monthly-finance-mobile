@@ -217,7 +217,11 @@ export default function App() {
           num(f.get("interestFreeTermMonths")) || 36;
         loan.monthlyPlan = loan.interestMonthlyPlan;
         loan.current = loan.interestRemaining + loan.interestFreeRemaining;
-        loan.initial = num(f.get("initial")) || loan.initial || loan.current;
+        loan.initial =
+          loan.current +
+          d.repayments
+            .filter((record) => record.loanId === loan.id && record.paid)
+            .reduce((sum, record) => sum + record.amount, 0);
         loan.note = note;
       }
       if (drawer === "loanHistory") {
@@ -481,12 +485,6 @@ export default function App() {
                   name="loanName"
                   value={data.loans[0]?.name || "车贷"}
                   required
-                />
-                <Field
-                  label="初始贷款金额"
-                  name="initial"
-                  type="number"
-                  value={data.loans[0]?.initial || 0}
                 />
                 <Field
                   label="有息阶段开始月份"
@@ -1100,7 +1098,12 @@ function Dashboard({
   const s = summary(data, month),
     ms = monthsBack(month, 6),
     loan = data.loans[0],
-    paid = loan ? loan.initial - loan.current : 0;
+    paid = loan
+      ? data.repayments
+          .filter((record) => record.loanId === loan.id && record.paid)
+          .reduce((sum, record) => sum + record.amount, 0)
+      : 0,
+    loanTotal = loan ? paid + loan.current : 0;
   return (
     <>
       <section className="hero">
@@ -1138,17 +1141,17 @@ function Dashboard({
         <div className="panel">
           <div className="row">
             <h3>车贷还款进度</h3>
-            <b>{loan.initial ? Math.round((paid / loan.initial) * 100) : 0}%</b>
+            <b>{loanTotal ? Math.round((paid / loanTotal) * 100) : 0}%</b>
           </div>
           <div className="progress">
             <i
               style={{
-                width: `${loan.initial ? Math.min(100, (paid / loan.initial) * 100) : 0}%`,
+                width: `${loanTotal ? Math.min(100, (paid / loanTotal) * 100) : 0}%`,
               }}
             />
           </div>
           <p>
-            {money(paid)} / {money(loan.initial)}
+            {money(paid)} / {money(loanTotal)}
           </p>
         </div>
       )}
@@ -1185,7 +1188,8 @@ function LoanPage({
       (l.interestRemaining || 0) + (l.interestFreeRemaining || 0) || l.current,
     bankBalance = summary(data, month).bank,
     fundingGap = Math.max(0, totalDue - bankBalance - (l.externalFunds || 0)),
-    paid = Math.max(recordedPaid, l.initial - l.current, 0),
+    paid = recordedPaid,
+    loanTotal = paid + totalDue,
     schedule = loanSchedule(l, month),
     phaseText = schedule.inInterest
       ? schedule.interestMonthsLeft === 0
@@ -1208,7 +1212,7 @@ function LoanPage({
       <div className="loanhero">
         <div className="loanmetrics">
           <div className="primarymetric">
-            <small>还需要攒</small>
+            <small>还需要攒 · 待还金额中的资金缺口</small>
             <strong>{money(fundingGap)}</strong>
           </div>
           <div>
@@ -1220,6 +1224,11 @@ function LoanPage({
             <b>{money(totalDue)}</b>
           </div>
         </div>
+        <div className="loantotalformula">
+          <span>贷款总额</span>
+          <b>{money(loanTotal)}</b>
+          <small>已还金额 + 待还合计</small>
+        </div>
         <div className="loanphase">
           <span>当前阶段</span>
           <b>{phaseText}</b>
@@ -1227,7 +1236,7 @@ function LoanPage({
         <div className="progress">
           <i
             style={{
-              width: `${l.initial ? Math.min(100, (paid / l.initial) * 100) : 0}%`,
+              width: `${loanTotal ? Math.min(100, (paid / loanTotal) * 100) : 0}%`,
             }}
           />
         </div>
@@ -1235,8 +1244,6 @@ function LoanPage({
       <div className="cards">
         <Card label="待还有息部分" value={l.interestRemaining || 0} />
         <Card label="待还无息部分" value={l.interestFreeRemaining || 0} />
-        <Card label="有息阶段月还" value={schedule.interestPlan} />
-        <Card label="无息阶段月还" value={schedule.interestFreePlan} />
         <Card label="本月已还" value={summary(data, month).repay} />
         <Card label="还款卡余额" value={bankBalance} />
         <Card label="其他可用资金" value={l.externalFunds || 0} />

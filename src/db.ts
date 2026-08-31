@@ -130,9 +130,14 @@ export function ensureHistoricalLoanRepayments(data: AppData) {
     });
     changed = true;
   });
-  const inferredInitial = augustBalance + months.length * 6500;
-  if (!loan.initial || loan.initial < inferredInitial) {
-    loan.initial = inferredInitial;
+  const paidTotal = data.repayments
+      .filter((record) => record.loanId === loan.id && record.paid)
+      .reduce((sum, record) => sum + record.amount, 0),
+    remainingTotal =
+      (loan.interestRemaining || 0) + (loan.interestFreeRemaining || 0),
+    calculatedInitial = remainingTotal + paidTotal;
+  if (calculatedInitial > 0 && loan.initial !== calculatedInitial) {
+    loan.initial = calculatedInitial;
     changed = true;
   }
   return changed;

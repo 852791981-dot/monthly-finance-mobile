@@ -41,6 +41,7 @@ describe("month logic", () => {
     expect(d.repayments[10].month).toBe("2026-08");
     expect(d.repayments.reduce((sum, x) => sum + x.amount, 0)).toBe(71500);
     expect(d.repayments[10].after).toBe(271500);
+    expect(d.loans[0].initial).toBe(343000);
     expect(ensureHistoricalLoanRepayments(d)).toBe(false);
     expect(d.repayments).toHaveLength(11);
   });
