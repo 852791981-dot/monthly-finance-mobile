@@ -23,6 +23,11 @@ export interface Loan {
   externalFunds?: number;
   interestRemaining?: number;
   interestFreeRemaining?: number;
+  interestStartMonth?: string;
+  interestMonthlyPlan?: number;
+  interestTermMonths?: number;
+  interestFreeMonthlyPlan?: number;
+  interestFreeTermMonths?: number;
 }
 export interface Repayment {
   id: string;

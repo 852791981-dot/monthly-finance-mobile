@@ -14,6 +14,10 @@ describe("month logic", () => {
       "2026-01",
       "2026-02",
     ]));
+  it("calculates the two-stage loan schedule from October 2025", () => {
+    expect(shiftMonth("2025-10", 24)).toBe("2027-10");
+    expect(shiftMonth("2025-10", 24 + 36)).toBe("2030-10");
+  });
   it("summarizes monthly figures", () => {
     const d = emptyData();
     d.expenses = [{ id: uid(), month: "2027-01", amount: 1000, note: "" }];

@@ -15,7 +15,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import type { AppData, CategoryKind } from "./types";
+import type { AppData, CategoryKind, Loan } from "./types";
 import { load, save, demoData, emptyData } from "./db";
 import {
   currentMonth,
@@ -46,6 +46,33 @@ const labels: Record<CategoryKind, string> = {
   saving: "储蓄渠道",
   bank: "银行卡",
   loan: "贷款名称",
+};
+const loanSchedule = (loan: Loan, month: string) => {
+  const start = loan.interestStartMonth || "2025-10",
+    interestTerm = loan.interestTermMonths || 24,
+    interestFreeTerm = loan.interestFreeTermMonths || 36,
+    interestEnd = shiftMonth(start, interestTerm),
+    interestFreeEnd = shiftMonth(interestEnd, interestFreeTerm),
+    interestPlan = loan.interestMonthlyPlan || loan.monthlyPlan || 6500,
+    interestFreePlan = loan.interestFreeMonthlyPlan || 5200,
+    distance = (from: string, to: string) => {
+      const [fy, fm] = from.split("-").map(Number),
+        [ty, tm] = to.split("-").map(Number);
+      return (ty - fy) * 12 + tm - fm;
+    },
+    inInterest = month <= interestEnd;
+  return {
+    start,
+    interestTerm,
+    interestFreeTerm,
+    interestEnd,
+    interestFreeEnd,
+    interestPlan,
+    interestFreePlan,
+    currentPlan: inInterest ? interestPlan : interestFreePlan,
+    interestMonthsLeft: Math.max(0, distance(month, interestEnd)),
+    inInterest,
+  };
 };
 export default function App() {
   const [data, setData] = useState<AppData>();
@@ -178,10 +205,17 @@ export default function App() {
         loan.interestRemaining = num(f.get("interestRemaining"));
         loan.interestFreeRemaining = num(f.get("interestFreeRemaining"));
         loan.externalFunds = num(f.get("externalFunds"));
-        loan.monthlyPlan = num(f.get("monthlyPlan"));
-        loan.startMonth = String(
-          f.get("startMonth") || loan.startMonth || month,
+        loan.interestStartMonth = String(
+          f.get("interestStartMonth") || "2025-10",
         );
+        loan.startMonth = loan.interestStartMonth;
+        loan.interestMonthlyPlan = num(f.get("interestMonthlyPlan")) || 6500;
+        loan.interestTermMonths = num(f.get("interestTermMonths")) || 24;
+        loan.interestFreeMonthlyPlan =
+          num(f.get("interestFreeMonthlyPlan")) || 5200;
+        loan.interestFreeTermMonths =
+          num(f.get("interestFreeTermMonths")) || 36;
+        loan.monthlyPlan = loan.interestMonthlyPlan;
         loan.current = loan.interestRemaining + loan.interestFreeRemaining;
         loan.initial = num(f.get("initial")) || loan.initial || loan.current;
         loan.note = note;
@@ -189,7 +223,12 @@ export default function App() {
       if (drawer === "loanHistory") {
         const loan = d.loans[0];
         if (!loan) return;
-        const start = String(f.get("historyStart") || loan.startMonth || month),
+        const start = String(
+            f.get("historyStart") ||
+              loan.interestStartMonth ||
+              loan.startMonth ||
+              month,
+          ),
           end = String(f.get("historyEnd") || month),
           amount = num(f.get("historyAmount")),
           months = monthRange(start, end),
@@ -216,6 +255,8 @@ export default function App() {
         });
         if (!loan.startMonth || start < loan.startMonth)
           loan.startMonth = start;
+        if (!loan.interestStartMonth || start < loan.interestStartMonth)
+          loan.interestStartMonth = start;
       }
       if (drawer === "bank") {
         const id = String(f.get("channelId")),
@@ -415,7 +456,8 @@ export default function App() {
                   type="number"
                   value={Math.max(
                     0,
-                    data.loans[0].current - data.loans[0].monthlyPlan,
+                    data.loans[0].current -
+                      loanSchedule(data.loans[0], month).currentPlan,
                   )}
                 />
                 <Field label="实际还款日期" name="date" type="date" />
@@ -447,10 +489,10 @@ export default function App() {
                   value={data.loans[0]?.initial || 0}
                 />
                 <Field
-                  label="开始还款月份"
-                  name="startMonth"
+                  label="有息阶段开始月份"
+                  name="interestStartMonth"
                   type="month"
-                  value={data.loans[0]?.startMonth || "2025-10"}
+                  value={data.loans[0]?.interestStartMonth || "2025-10"}
                   required
                 />
                 <Field
@@ -472,13 +514,40 @@ export default function App() {
                   value={data.loans[0]?.externalFunds || 0}
                 />
                 <Field
-                  label="每月计划还款"
-                  name="monthlyPlan"
+                  label="有息阶段每月还款"
+                  name="interestMonthlyPlan"
                   type="number"
-                  value={data.loans[0]?.monthlyPlan || 0}
+                  value={
+                    data.loans[0]?.interestMonthlyPlan ||
+                    data.loans[0]?.monthlyPlan ||
+                    6500
+                  }
+                  required
+                />
+                <Field
+                  label="有息阶段期限（月）"
+                  name="interestTermMonths"
+                  type="number"
+                  value={data.loans[0]?.interestTermMonths || 24}
+                  required
+                />
+                <Field
+                  label="无息阶段每月还款"
+                  name="interestFreeMonthlyPlan"
+                  type="number"
+                  value={data.loans[0]?.interestFreeMonthlyPlan || 5200}
+                  required
+                />
+                <Field
+                  label="无息阶段期限（月）"
+                  name="interestFreeTermMonths"
+                  type="number"
+                  value={data.loans[0]?.interestFreeTermMonths || 36}
+                  required
                 />
                 <p className="formhint">
-                  还需攒 = 待还总额 − 还款卡余额 − 其他可用资金
+                  有息截止月份按“开始月份 + 有息期限”自动计算；还需攒 = 待还总额
+                  − 还款卡余额 − 其他可用资金。
                 </p>
               </>
             )}
@@ -488,7 +557,7 @@ export default function App() {
                   label="开始月份"
                   name="historyStart"
                   type="month"
-                  value={data.loans[0].startMonth || "2025-10"}
+                  value={data.loans[0].interestStartMonth || "2025-10"}
                   required
                 />
                 <Field
@@ -502,7 +571,11 @@ export default function App() {
                   label="每月已还金额"
                   name="historyAmount"
                   type="number"
-                  value={data.loans[0].monthlyPlan || 6500}
+                  value={
+                    data.loans[0].interestMonthlyPlan ||
+                    data.loans[0].monthlyPlan ||
+                    6500
+                  }
                   required
                 />
                 <p className="formhint">
@@ -520,7 +593,9 @@ export default function App() {
                 type="number"
                 required
                 value={
-                  drawer === "loan" ? data.loans[0]?.monthlyPlan : undefined
+                  drawer === "loan" && data.loans[0]
+                    ? loanSchedule(data.loans[0], month).currentPlan
+                    : undefined
                 }
               />
             )}
@@ -1106,9 +1181,14 @@ function LoanPage({
     bankBalance = summary(data, month).bank,
     fundingGap = Math.max(0, totalDue - bankBalance - (l.externalFunds || 0)),
     paid = Math.max(0, l.initial - l.current),
-    interestMonths = l.monthlyPlan
-      ? Math.ceil((l.interestRemaining || 0) / l.monthlyPlan)
-      : 0;
+    schedule = loanSchedule(l, month),
+    phaseText = schedule.inInterest
+      ? schedule.interestMonthsLeft === 0
+        ? `有息阶段于 ${monthLabel(schedule.interestEnd)} 结束`
+        : `有息至 ${monthLabel(schedule.interestEnd)} · 剩 ${schedule.interestMonthsLeft} 个月`
+      : month <= schedule.interestFreeEnd
+        ? `无息阶段至 ${monthLabel(schedule.interestFreeEnd)}`
+        : "全部还款阶段已结束";
   return (
     <>
       <div className="pagehead">
@@ -1125,11 +1205,7 @@ function LoanPage({
         <strong>{money(fundingGap)}</strong>
         <div className="row">
           <span>待还合计 {money(totalDue)}</span>
-          <span>
-            {interestMonths > 0
-              ? `有息阶段约剩 ${interestMonths} 个月`
-              : "有息阶段已结束"}
-          </span>
+          <span>{phaseText}</span>
         </div>
         <div className="progress">
           <i
@@ -1142,7 +1218,8 @@ function LoanPage({
       <div className="cards">
         <Card label="待还有息部分" value={l.interestRemaining || 0} />
         <Card label="待还无息部分" value={l.interestFreeRemaining || 0} />
-        <Card label="计划月还" value={l.monthlyPlan} />
+        <Card label="有息阶段月还" value={schedule.interestPlan} />
+        <Card label="无息阶段月还" value={schedule.interestFreePlan} />
         <Card label="本月已还" value={summary(data, month).repay} />
         <Card label="还款卡余额" value={bankBalance} />
         <Card label="其他可用资金" value={l.externalFunds || 0} />
