@@ -1166,6 +1166,7 @@ function LoanPage({
   open: (x: Drawer) => void;
   remove: any;
 }) {
+  const [showRepaymentDetails, setShowRepaymentDetails] = useState(false);
   const l = data.loans[0];
   if (!l)
     return (
@@ -1176,11 +1177,15 @@ function LoanPage({
         <Quick onClick={() => open("loanPlan")}>录入车贷资料</Quick>
       </div>
     );
-  const totalDue =
+  const paidRecords = data.repayments
+      .filter((x) => x.loanId === l.id && x.paid && x.month <= month)
+      .sort((a, b) => a.month.localeCompare(b.month)),
+    recordedPaid = paidRecords.reduce((sum, record) => sum + record.amount, 0),
+    totalDue =
       (l.interestRemaining || 0) + (l.interestFreeRemaining || 0) || l.current,
     bankBalance = summary(data, month).bank,
     fundingGap = Math.max(0, totalDue - bankBalance - (l.externalFunds || 0)),
-    paid = Math.max(0, l.initial - l.current),
+    paid = Math.max(recordedPaid, l.initial - l.current, 0),
     schedule = loanSchedule(l, month),
     phaseText = schedule.inInterest
       ? schedule.interestMonthsLeft === 0
@@ -1201,11 +1206,23 @@ function LoanPage({
         </button>
       </div>
       <div className="loanhero">
-        <small>按当前资金计划，还需要攒</small>
-        <strong>{money(fundingGap)}</strong>
-        <div className="row">
-          <span>待还合计 {money(totalDue)}</span>
-          <span>{phaseText}</span>
+        <div className="loanmetrics">
+          <div className="primarymetric">
+            <small>还需要攒</small>
+            <strong>{money(fundingGap)}</strong>
+          </div>
+          <div>
+            <small>已还金额</small>
+            <b>{money(paid)}</b>
+          </div>
+          <div>
+            <small>待还合计</small>
+            <b>{money(totalDue)}</b>
+          </div>
+        </div>
+        <div className="loanphase">
+          <span>当前阶段</span>
+          <b>{phaseText}</b>
         </div>
         <div className="progress">
           <i
@@ -1226,24 +1243,61 @@ function LoanPage({
       </div>
       <div className="actions">
         <Quick onClick={() => open("loan")}>记本月还款</Quick>
-        <Quick onClick={() => open("loanHistory")}>补录历史还款</Quick>
         <Quick onClick={() => open("bank")}>更新账户余额</Quick>
         <Quick onClick={() => open("loanPlan")}>编辑车贷资料</Quick>
       </div>
-      <List
-        title="还款记录"
-        rows={data.repayments
-          .filter((x) => x.loanId === l.id)
-          .sort((a, b) => b.month.localeCompare(a.month))
-          .map((x) => ({
-            id: x.id,
-            main: monthLabel(x.month),
-            sub: `${x.paid ? "已还" : "未还"} · 余额 ${money(x.after)}`,
-            amount: x.amount,
-            type: "repayments",
-          }))}
-        remove={remove}
-      />
+      <section className="list repaymentsummary">
+        <div className="row repaymenttitle">
+          <h3>还款记录</h3>
+          {paidRecords.length > 0 && (
+            <button
+              className="textbutton"
+              onClick={() => setShowRepaymentDetails((value) => !value)}
+            >
+              {showRepaymentDetails ? "收起明细" : "查看明细"}
+            </button>
+          )}
+        </div>
+        {paidRecords.length ? (
+          <>
+            <div className="repaymentrange">
+              <div>
+                <b>
+                  {monthLabel(paidRecords[0].month)}—
+                  {monthLabel(paidRecords[paidRecords.length - 1].month)}
+                </b>
+                <small>已还 {paidRecords.length} 期</small>
+              </div>
+              <div>
+                <small>累计已还</small>
+                <strong>{money(recordedPaid)}</strong>
+              </div>
+            </div>
+            {showRepaymentDetails && (
+              <div className="repaymentdetails">
+                {[...paidRecords].reverse().map((record) => (
+                  <div className="listrow" key={record.id}>
+                    <div>
+                      <b>{monthLabel(record.month)}</b>
+                      <small>还款后余额 {money(record.after)}</small>
+                    </div>
+                    <strong>{money(record.amount)}</strong>
+                    <button
+                      className="icon danger"
+                      aria-label={`删除${monthLabel(record.month)}还款记录`}
+                      onClick={() => remove("repayments", record.id)}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted">还没有还款记录</p>
+        )}
+      </section>
       <List
         title="本月还款账户记录"
         rows={data.bankRecords

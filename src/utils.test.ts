@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyData } from "./db";
+import { emptyData, ensureHistoricalLoanRepayments } from "./db";
 import { monthRange, num, shiftMonth, summary, uid } from "./utils";
 describe("month logic", () => {
   it("crosses year boundaries", () =>
@@ -17,6 +17,32 @@ describe("month logic", () => {
   it("calculates the two-stage loan schedule from October 2025", () => {
     expect(shiftMonth("2025-10", 24)).toBe("2027-10");
     expect(shiftMonth("2025-10", 24 + 36)).toBe("2030-10");
+  });
+  it("fills the eleven historical car-loan payments without duplicates", () => {
+    const d = emptyData(),
+      loanId = uid();
+    d.loans = [
+      {
+        id: loanId,
+        name: "车贷",
+        initial: 0,
+        current: 271500,
+        monthlyPlan: 0,
+        startMonth: "2026-08",
+        endMonth: "",
+        note: "",
+        interestRemaining: 84500,
+        interestFreeRemaining: 187000,
+      },
+    ];
+    expect(ensureHistoricalLoanRepayments(d)).toBe(true);
+    expect(d.repayments).toHaveLength(11);
+    expect(d.repayments[0].month).toBe("2025-10");
+    expect(d.repayments[10].month).toBe("2026-08");
+    expect(d.repayments.reduce((sum, x) => sum + x.amount, 0)).toBe(71500);
+    expect(d.repayments[10].after).toBe(271500);
+    expect(ensureHistoricalLoanRepayments(d)).toBe(false);
+    expect(d.repayments).toHaveLength(11);
   });
   it("summarizes monthly figures", () => {
     const d = emptyData();

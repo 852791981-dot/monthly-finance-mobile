@@ -1,6 +1,6 @@
 import { openDB } from "idb";
 import type { AppData, CategoryKind } from "./types";
-import { currentMonth, uid, shiftMonth } from "./utils";
+import { currentMonth, monthRange, uid, shiftMonth } from "./utils";
 const DB = "monthly-finance-db",
   KEY = "app";
 const defaults: Record<CategoryKind, string[]> = {
@@ -63,13 +63,79 @@ async function store() {
   });
 }
 export async function load() {
-  return (
-    ((await (await store()).get("state", KEY)) as AppData | undefined) ||
-    emptyData()
-  );
+  const database = await store(),
+    data =
+      ((await database.get("state", KEY)) as AppData | undefined) ||
+      emptyData();
+  if (ensureHistoricalLoanRepayments(data))
+    await database.put("state", data, KEY);
+  return data;
 }
 export async function save(data: AppData) {
   await (await store()).put("state", data, KEY);
+}
+export function ensureHistoricalLoanRepayments(data: AppData) {
+  const loan = data.loans[0];
+  if (
+    !loan ||
+    (loan.interestRemaining === undefined &&
+      loan.interestFreeRemaining === undefined)
+  )
+    return false;
+  let changed = false;
+  const defaults = {
+    interestStartMonth: "2025-10",
+    interestMonthlyPlan: 6500,
+    interestTermMonths: 24,
+    interestFreeMonthlyPlan: 5200,
+    interestFreeTermMonths: 36,
+  } as const;
+  for (const [key, value] of Object.entries(defaults)) {
+    if (loan[key as keyof typeof defaults] === undefined) {
+      (loan as unknown as Record<string, string | number>)[key] = value;
+      changed = true;
+    }
+  }
+  if (!loan.monthlyPlan) {
+    loan.monthlyPlan = 6500;
+    changed = true;
+  }
+  if (!loan.startMonth || loan.startMonth > "2025-10") {
+    loan.startMonth = "2025-10";
+    changed = true;
+  }
+  const months = monthRange("2025-10", "2026-08"),
+    existingMonths = new Set(
+      data.repayments
+        .filter((record) => record.loanId === loan.id)
+        .map((record) => record.month),
+    ),
+    augustRecord = data.repayments.find(
+      (record) => record.loanId === loan.id && record.month === "2026-08",
+    ),
+    augustBalance = augustRecord?.after || loan.current;
+  months.forEach((month, index) => {
+    if (existingMonths.has(month)) return;
+    const after = augustBalance + 6500 * (months.length - index - 1);
+    data.repayments.push({
+      id: uid(),
+      loanId: loan.id,
+      month,
+      amount: 6500,
+      before: after + 6500,
+      after,
+      paid: true,
+      paidDate: "",
+      note: "历史还款记录",
+    });
+    changed = true;
+  });
+  const inferredInitial = augustBalance + months.length * 6500;
+  if (!loan.initial || loan.initial < inferredInitial) {
+    loan.initial = inferredInitial;
+    changed = true;
+  }
+  return changed;
 }
 export function demoData() {
   const d = emptyData();
