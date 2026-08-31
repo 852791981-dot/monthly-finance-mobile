@@ -10,6 +10,11 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: [],
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+      },
       manifest: {
         name: "月度财务",
         short_name: "月度财务",
