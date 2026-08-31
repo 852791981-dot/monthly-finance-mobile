@@ -20,6 +20,7 @@ import { load, save, demoData, emptyData } from "./db";
 import {
   currentMonth,
   money,
+  monthRange,
   monthLabel,
   monthsBack,
   num,
@@ -33,6 +34,7 @@ type Drawer =
   | "important"
   | "fuel"
   | "loan"
+  | "loanHistory"
   | "loanPlan"
   | "bank"
   | "saving"
@@ -177,9 +179,43 @@ export default function App() {
         loan.interestFreeRemaining = num(f.get("interestFreeRemaining"));
         loan.externalFunds = num(f.get("externalFunds"));
         loan.monthlyPlan = num(f.get("monthlyPlan"));
+        loan.startMonth = String(
+          f.get("startMonth") || loan.startMonth || month,
+        );
         loan.current = loan.interestRemaining + loan.interestFreeRemaining;
         loan.initial = num(f.get("initial")) || loan.initial || loan.current;
         loan.note = note;
+      }
+      if (drawer === "loanHistory") {
+        const loan = d.loans[0];
+        if (!loan) return;
+        const start = String(f.get("historyStart") || loan.startMonth || month),
+          end = String(f.get("historyEnd") || month),
+          amount = num(f.get("historyAmount")),
+          months = monthRange(start, end),
+          existing = new Set(
+            d.repayments
+              .filter((x) => x.loanId === loan.id)
+              .map((x) => x.month),
+          );
+        months.forEach((recordMonth, index) => {
+          if (existing.has(recordMonth)) return;
+          const monthsAfter = months.length - index - 1,
+            after = loan.current + amount * monthsAfter;
+          d.repayments.push({
+            id: uid(),
+            loanId: loan.id,
+            month: recordMonth,
+            amount,
+            before: after + amount,
+            after,
+            paid: true,
+            paidDate: "",
+            note: note || "批量补录历史还款",
+          });
+        });
+        if (!loan.startMonth || start < loan.startMonth)
+          loan.startMonth = start;
       }
       if (drawer === "bank") {
         const id = String(f.get("channelId")),
@@ -339,6 +375,7 @@ export default function App() {
               important: "新增重要支出",
               fuel: "更新加油费用",
               loan: "更新本月车贷",
+              loanHistory: "补录历史还款",
               loanPlan: "编辑车贷资料",
               bank: "更新银行卡",
               saving: "更新本月储蓄",
@@ -410,6 +447,13 @@ export default function App() {
                   value={data.loans[0]?.initial || 0}
                 />
                 <Field
+                  label="开始还款月份"
+                  name="startMonth"
+                  type="month"
+                  value={data.loans[0]?.startMonth || "2025-10"}
+                  required
+                />
+                <Field
                   label="待还（有息阶段）"
                   name="interestRemaining"
                   type="number"
@@ -438,6 +482,34 @@ export default function App() {
                 </p>
               </>
             )}
+            {drawer === "loanHistory" && data.loans[0] && (
+              <>
+                <Field
+                  label="开始月份"
+                  name="historyStart"
+                  type="month"
+                  value={data.loans[0].startMonth || "2025-10"}
+                  required
+                />
+                <Field
+                  label="补录到"
+                  name="historyEnd"
+                  type="month"
+                  value={month}
+                  required
+                />
+                <Field
+                  label="每月已还金额"
+                  name="historyAmount"
+                  type="number"
+                  value={data.loans[0].monthlyPlan || 6500}
+                  required
+                />
+                <p className="formhint">
+                  将按月份批量生成“已还款”记录；已有月份会自动跳过，不会再次减少当前贷款余额。
+                </p>
+              </>
+            )}
             {(drawer === "expense" ||
               drawer === "important" ||
               drawer === "fuel" ||
@@ -454,7 +526,11 @@ export default function App() {
             )}
             <Field label="备注（可选）" name="note" />
             <button className="primary" type="submit">
-              {drawer === "loanPlan" ? "保存车贷资料" : "保存本月记录"}
+              {drawer === "loanPlan"
+                ? "保存车贷资料"
+                : drawer === "loanHistory"
+                  ? "生成历史还款记录"
+                  : "保存本月记录"}
             </button>
           </form>
         </Drawer>
@@ -1073,6 +1149,7 @@ function LoanPage({
       </div>
       <div className="actions">
         <Quick onClick={() => open("loan")}>记本月还款</Quick>
+        <Quick onClick={() => open("loanHistory")}>补录历史还款</Quick>
         <Quick onClick={() => open("bank")}>更新账户余额</Quick>
         <Quick onClick={() => open("loanPlan")}>编辑车贷资料</Quick>
       </div>

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { emptyData } from "./db";
-import { num, shiftMonth, summary, uid } from "./utils";
+import { monthRange, num, shiftMonth, summary, uid } from "./utils";
 describe("month logic", () => {
   it("crosses year boundaries", () =>
     expect(shiftMonth("2027-01", -1)).toBe("2026-12"));
   it("accepts negative bank movements", () =>
     expect(num("-1250.55")).toBe(-1250.55));
+  it("creates an inclusive month range for loan history", () =>
+    expect(monthRange("2025-10", "2026-02")).toEqual([
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+    ]));
   it("summarizes monthly figures", () => {
     const d = emptyData();
     d.expenses = [{ id: uid(), month: "2027-01", amount: 1000, note: "" }];

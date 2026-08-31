@@ -16,6 +16,16 @@ export const shiftMonth = (m: string, d: number) => {
 };
 export const monthsBack = (m: string, n: number) =>
   Array.from({ length: n }, (_, i) => shiftMonth(m, i - n + 1));
+export const monthRange = (start: string, end: string) => {
+  if (!/^\d{4}-\d{2}$/.test(start) || !/^\d{4}-\d{2}$/.test(end) || start > end)
+    return [];
+  const result: string[] = [];
+  for (let cursor = start; cursor <= end; cursor = shiftMonth(cursor, 1)) {
+    result.push(cursor);
+    if (result.length >= 240) break;
+  }
+  return result;
+};
 export const num = (v: FormDataEntryValue | null) =>
   Math.round((Number(v) || 0) * 100) / 100;
 export function summary(data: AppData, month: string) {
