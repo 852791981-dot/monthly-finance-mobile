@@ -943,6 +943,9 @@ nav .active {
 .loanhero .progress {
   margin-top: 12px;
 }
+.loanhero + .cards {
+  margin-top: 14px;
+}
 @media (min-width: 700px) {
   .app {
     padding-left: 28px;
