@@ -1224,11 +1224,6 @@ function LoanPage({
             <b>{money(totalDue)}</b>
           </div>
         </div>
-        <div className="loantotalformula">
-          <span>贷款总额</span>
-          <b>{money(loanTotal)}</b>
-          <small>已还金额 + 待还合计</small>
-        </div>
         <div className="loanphase">
           <span>当前阶段</span>
           <b>{phaseText}</b>
