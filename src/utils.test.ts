@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { emptyData, ensureHistoricalLoanRepayments } from "./db";
-import { monthRange, num, shiftMonth, summary, uid } from "./utils";
+import {
+  fundingSegments,
+  monthRange,
+  num,
+  shiftMonth,
+  summary,
+  uid,
+} from "./utils";
 describe("month logic", () => {
   it("crosses year boundaries", () =>
     expect(shiftMonth("2027-01", -1)).toBe("2026-12"));
@@ -44,6 +51,14 @@ describe("month logic", () => {
     expect(d.loans[0].initial).toBe(343000);
     expect(ensureHistoricalLoanRepayments(d)).toBe(false);
     expect(d.repayments).toHaveLength(11);
+  });
+  it("splits the loan progress into paid, bank, other funds, and gap", () => {
+    expect(fundingSegments(343000, 71500, 131512, 120000)).toEqual({
+      paid: 71500,
+      bank: 131512,
+      external: 120000,
+      gap: 19988,
+    });
   });
   it("summarizes monthly figures", () => {
     const d = emptyData();

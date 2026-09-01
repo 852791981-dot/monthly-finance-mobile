@@ -1,6 +1,6 @@
 export type Month = string;
 export type CategoryKind =
-  "expense" | "important" | "fuel" | "saving" | "bank" | "loan";
+  "expense" | "important" | "fuel" | "saving" | "income" | "bank" | "loan";
 export interface Category {
   id: string;
   kind: CategoryKind;
@@ -86,6 +86,13 @@ export interface SavingRecord {
   manual: boolean;
   note: string;
 }
+export interface IncomeRecord {
+  id: string;
+  month: Month;
+  sourceId: string;
+  amount: number;
+  note: string;
+}
 export interface AppData {
   version: number;
   initialized: boolean;
@@ -99,4 +106,5 @@ export interface AppData {
   importantExpenses: ImportantExpense[];
   fuelRecords: FuelRecord[];
   savingRecords: SavingRecord[];
+  incomeRecords: IncomeRecord[];
 }

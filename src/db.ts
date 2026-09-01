@@ -27,6 +27,7 @@ const defaults: Record<CategoryKind, string[]> = {
     "理财",
     "其他",
   ],
+  income: ["工资", "父母给的", "奖金", "副业收入", "其他收入"],
   bank: ["还款银行卡"],
   loan: ["车贷"],
 };
@@ -53,6 +54,7 @@ export function emptyData(): AppData {
     importantExpenses: [],
     fuelRecords: [],
     savingRecords: [],
+    incomeRecords: [],
   };
 }
 async function store() {
@@ -67,12 +69,34 @@ export async function load() {
     data =
       ((await database.get("state", KEY)) as AppData | undefined) ||
       emptyData();
-  if (ensureHistoricalLoanRepayments(data))
-    await database.put("state", data, KEY);
+  const shapeChanged = ensureCurrentShape(data),
+    loanChanged = ensureHistoricalLoanRepayments(data);
+  if (shapeChanged || loanChanged) await database.put("state", data, KEY);
   return data;
 }
 export async function save(data: AppData) {
   await (await store()).put("state", data, KEY);
+}
+export function ensureCurrentShape(data: AppData) {
+  let changed = false;
+  if (!Array.isArray(data.incomeRecords)) {
+    data.incomeRecords = [];
+    changed = true;
+  }
+  if (!data.categories.some((item) => item.kind === "income")) {
+    defaults.income.forEach((name, order) =>
+      data.categories.push({
+        id: uid(),
+        kind: "income",
+        name,
+        active: true,
+        order,
+        includeInTotal: true,
+      }),
+    );
+    changed = true;
+  }
+  return changed;
 }
 export function ensureHistoricalLoanRepayments(data: AppData) {
   const loan = data.loans[0];

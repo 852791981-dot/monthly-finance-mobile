@@ -28,6 +28,21 @@ export const monthRange = (start: string, end: string) => {
 };
 export const num = (v: FormDataEntryValue | null) =>
   Math.round((Number(v) || 0) * 100) / 100;
+export function fundingSegments(
+  total: number,
+  paid: number,
+  bank: number,
+  external: number,
+) {
+  const safeTotal = Math.max(0, total),
+    safePaid = Math.min(Math.max(0, paid), safeTotal),
+    afterPaid = safeTotal - safePaid,
+    safeBank = Math.min(Math.max(0, bank), afterPaid),
+    afterBank = afterPaid - safeBank,
+    safeExternal = Math.min(Math.max(0, external), afterBank),
+    gap = Math.max(0, safeTotal - safePaid - safeBank - safeExternal);
+  return { paid: safePaid, bank: safeBank, external: safeExternal, gap };
+}
 export function summary(data: AppData, month: string) {
   const daily = data.expenses.find((x) => x.month === month)?.amount || 0;
   const important = data.importantExpenses

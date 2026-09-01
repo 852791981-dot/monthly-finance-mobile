@@ -16,9 +16,10 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { AppData, CategoryKind, Loan } from "./types";
-import { load, save, demoData, emptyData } from "./db";
+import { load, save, demoData, emptyData, ensureCurrentShape } from "./db";
 import {
   currentMonth,
+  fundingSegments,
   money,
   monthRange,
   monthLabel,
@@ -38,12 +39,14 @@ type Drawer =
   | "loanPlan"
   | "bank"
   | "saving"
+  | "income"
   | null;
 const labels: Record<CategoryKind, string> = {
   expense: "支出分类",
   important: "重要事项标签",
   fuel: "加油标签",
   saving: "储蓄渠道",
+  income: "收入来源",
   bank: "银行卡",
   loan: "贷款名称",
 };
@@ -306,6 +309,15 @@ export default function App() {
           note,
         });
       }
+      if (drawer === "income") {
+        d.incomeRecords.push({
+          id: uid(),
+          month,
+          sourceId: String(f.get("sourceId")),
+          amount: num(f.get("amount")),
+          note,
+        });
+      }
     });
     setDrawer(null);
   };
@@ -387,6 +399,7 @@ export default function App() {
               setSavingChannelId(channelId);
               setDrawer("saving");
             }}
+            openIncome={() => setDrawer("income")}
             remove={remove}
           />
         )}{" "}
@@ -424,6 +437,7 @@ export default function App() {
               loanPlan: "编辑车贷资料",
               bank: "更新银行卡",
               saving: "更新本月储蓄",
+              income: "记录本月收入",
             }[drawer]
           }
           close={() => setDrawer(null)}
@@ -478,6 +492,9 @@ export default function App() {
                 selectedId={drawer === "saving" ? savingChannelId : undefined}
               />
             )}{" "}
+            {drawer === "income" && (
+              <Select label="收入来源" name="sourceId" items={cats("income")} />
+            )}
             {drawer === "loanPlan" && (
               <>
                 <Field
@@ -584,7 +601,8 @@ export default function App() {
             {(drawer === "expense" ||
               drawer === "important" ||
               drawer === "fuel" ||
-              drawer === "loan") && (
+              drawer === "loan" ||
+              drawer === "income") && (
               <Field
                 label={drawer === "loan" ? "本月还款金额" : "金额"}
                 name="amount"
@@ -1103,7 +1121,13 @@ function Dashboard({
           .filter((record) => record.loanId === loan.id && record.paid)
           .reduce((sum, record) => sum + record.amount, 0)
       : 0,
-    loanTotal = loan ? paid + loan.current : 0;
+    loanTotal = loan ? paid + loan.current : 0,
+    funding = loan
+      ? fundingSegments(loanTotal, paid, s.bank, loan.externalFunds || 0)
+      : { paid: 0, bank: 0, external: 0, gap: 0 },
+    fundedPercent = loanTotal
+      ? Math.round(((loanTotal - funding.gap) / loanTotal) * 100)
+      : 0;
   return (
     <>
       <section className="hero">
@@ -1140,19 +1164,45 @@ function Dashboard({
       {loan && (
         <div className="panel">
           <div className="row">
-            <h3>车贷还款进度</h3>
-            <b>{loanTotal ? Math.round((paid / loanTotal) * 100) : 0}%</b>
+            <h3>车贷资金进度</h3>
+            <b>{fundedPercent}%</b>
           </div>
-          <div className="progress">
-            <i
-              style={{
-                width: `${loanTotal ? Math.min(100, (paid / loanTotal) * 100) : 0}%`,
-              }}
-            />
+          <div className="fundingbar" aria-label="车贷资金分段进度">
+            {(
+              [
+                ["paid", funding.paid],
+                ["bank", funding.bank],
+                ["external", funding.external],
+                ["gap", funding.gap],
+              ] as const
+            ).map(([name, value]) => (
+              <i
+                className={name}
+                key={name}
+                style={{
+                  width: `${loanTotal ? (value / loanTotal) * 100 : 0}%`,
+                }}
+              />
+            ))}
           </div>
-          <p>
-            {money(paid)} / {money(loanTotal)}
-          </p>
+          <div className="fundinglegend">
+            <span>
+              <i className="paid" />
+              已还 {money(funding.paid)}
+            </span>
+            <span>
+              <i className="bank" />
+              账户余额 {money(funding.bank)}
+            </span>
+            <span>
+              <i className="external" />
+              其他资金 {money(funding.external)}
+            </span>
+            <span>
+              <i className="gap" />
+              还需攒 {money(funding.gap)}
+            </span>
+          </div>
         </div>
       )}
     </>
@@ -1405,11 +1455,13 @@ function SavingPage({
   data,
   month,
   openSaving,
+  openIncome,
   remove,
 }: {
   data: AppData;
   month: string;
   openSaving: (channelId: string) => void;
+  openIncome: () => void;
   remove: any;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1418,6 +1470,23 @@ function SavingPage({
     annual = data.savingRecords
       .filter((x) => x.month.startsWith(year))
       .reduce((a, x) => a + x.added - x.reduced, 0),
+    yearIncomeRecords = data.incomeRecords.filter((x) =>
+      x.month.startsWith(year),
+    ),
+    monthIncomeRecords = data.incomeRecords.filter((x) => x.month === month),
+    annualIncome = yearIncomeRecords.reduce((sum, x) => sum + x.amount, 0),
+    monthlyIncome = monthIncomeRecords.reduce((sum, x) => sum + x.amount, 0),
+    incomeSources = data.categories
+      .filter((x) => x.kind === "income")
+      .map((source) => ({
+        id: source.id,
+        name: source.name,
+        total: yearIncomeRecords
+          .filter((record) => record.sourceId === source.id)
+          .reduce((sum, record) => sum + record.amount, 0),
+      }))
+      .filter((source) => source.total > 0)
+      .sort((a, b) => b.total - a.total),
     channels = data.categories
       .filter((x) => x.kind === "saving" && x.active)
       .map((c) => {
@@ -1545,6 +1614,76 @@ function SavingPage({
         ))}
         {!channels.length && <p className="muted">请先在设置中添加储蓄渠道</p>}
       </section>
+      <section className="incomearea">
+        <div className="row incomehead">
+          <div>
+            <small>每月收入</small>
+            <h3>我的收入</h3>
+          </div>
+          <button className="incomeadd" onClick={openIncome}>
+            <Plus /> 记一笔收入
+          </button>
+        </div>
+        <div className="incomehero">
+          <div>
+            <small>{monthLabel(month)}收入</small>
+            <strong>{money(monthlyIncome)}</strong>
+          </div>
+          <div>
+            <small>{year} 年收入</small>
+            <b>{money(annualIncome)}</b>
+          </div>
+        </div>
+        <div className="incomesources">
+          <div className="row">
+            <h3>{year} 年收入来源</h3>
+            <small>随月份记录自动汇总</small>
+          </div>
+          {incomeSources.length ? (
+            incomeSources.map((source) => (
+              <div className="incomesourcerow" key={source.id}>
+                <span>{source.name}</span>
+                <i>
+                  <em
+                    style={{
+                      width: `${(source.total / Math.max(annualIncome, 1)) * 100}%`,
+                    }}
+                  />
+                </i>
+                <strong>{money(source.total)}</strong>
+              </div>
+            ))
+          ) : (
+            <p className="muted">本年还没有收入记录</p>
+          )}
+        </div>
+        <div className="incomehistory">
+          <h3>{monthLabel(month)}明细</h3>
+          {monthIncomeRecords.length ? (
+            monthIncomeRecords.map((record) => (
+              <div className="incomehistoryrow" key={record.id}>
+                <div>
+                  <b>
+                    {data.categories.find((x) => x.id === record.sourceId)
+                      ?.name || "已停用来源"}
+                  </b>
+                  <small>{record.note || "本月收入"}</small>
+                </div>
+                <strong>{money(record.amount)}</strong>
+                <button
+                  className="icon danger"
+                  aria-label="删除收入记录"
+                  onClick={() => remove("incomeRecords", record.id)}
+                >
+                  <Trash2 />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="muted">本月还没有收入记录</p>
+          )}
+        </div>
+      </section>
       <div className="panel">
         <h3>最近 12 个月储蓄趋势</h3>
         <Bars
@@ -1653,6 +1792,7 @@ function SettingsPage({
       data.importantExpenses.some((x) => x.categoryId === id) ||
       data.fuelRecords.some((x) => x.tagId === id) ||
       data.savingRecords.some((x) => x.channelId === id) ||
+      data.incomeRecords.some((x) => x.sourceId === id) ||
       data.bankRecords.some((x) => x.bankId === id);
     if (used) {
       if (confirm("此项目已有历史记录，不能直接删除。是否改为停用？"))
@@ -1691,6 +1831,7 @@ function SettingsPage({
         "repayments",
         "bankRecords",
         "savingRecords",
+        "incomeRecords",
       ] as const
     ).forEach((k) =>
       XLSX.utils.book_append_sheet(
@@ -1708,7 +1849,10 @@ function SettingsPage({
         const next = JSON.parse(String(reader.result));
         if (!next.version || !next.categories) throw 0;
         if (confirm("导入会覆盖当前数据，确定继续？"))
-          update((d) => Object.assign(d, next));
+          update((d) => {
+            Object.assign(d, next);
+            ensureCurrentShape(d);
+          });
       } catch {
         alert("备份文件格式不正确");
       }
