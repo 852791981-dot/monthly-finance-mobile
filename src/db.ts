@@ -70,8 +70,10 @@ export async function load() {
       ((await database.get("state", KEY)) as AppData | undefined) ||
       emptyData();
   const shapeChanged = ensureCurrentShape(data),
+    personalLoanSeeded = ensurePersonalLoanSeed(data),
     loanChanged = ensureHistoricalLoanRepayments(data);
-  if (shapeChanged || loanChanged) await database.put("state", data, KEY);
+  if (shapeChanged || personalLoanSeeded || loanChanged)
+    await database.put("state", data, KEY);
   return data;
 }
 export async function save(data: AppData) {
@@ -97,6 +99,48 @@ export function ensureCurrentShape(data: AppData) {
     changed = true;
   }
   return changed;
+}
+export function ensurePersonalLoanSeed(data: AppData) {
+  if (data.loans.length) return false;
+  const loanId = uid();
+  data.loans.push({
+    id: loanId,
+    name: "车贷",
+    initial: 343000,
+    current: 271500,
+    monthlyPlan: 6500,
+    startMonth: "2025-10",
+    endMonth: "2030-10",
+    note: "",
+    externalFunds: 120000,
+    interestRemaining: 84500,
+    interestFreeRemaining: 187000,
+    interestStartMonth: "2025-10",
+    interestMonthlyPlan: 6500,
+    interestTermMonths: 24,
+    interestFreeMonthlyPlan: 5200,
+    interestFreeTermMonths: 36,
+  });
+  const bank = data.categories
+    .filter((item) => item.kind === "bank")
+    .sort((a, b) => a.order - b.order)[0];
+  if (bank && !data.bankRecords.some((record) => record.bankId === bank.id)) {
+    data.bankRecords.push({
+      id: uid(),
+      bankId: bank.id,
+      month: "2026-08",
+      opening: 131512,
+      deposit: 0,
+      repayment: 0,
+      closing: 131512,
+      manual: true,
+      note: "预置还款账户余额",
+    });
+  }
+  data.initialized = true;
+  if (!data.startMonth || data.startMonth > "2025-10")
+    data.startMonth = "2025-10";
+  return true;
 }
 export function ensureHistoricalLoanRepayments(data: AppData) {
   const loan = data.loans[0];
