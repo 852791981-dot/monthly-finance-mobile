@@ -12,6 +12,7 @@ import {
   Download,
   Upload,
   Trash2,
+  Pencil,
   GripVertical,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -30,6 +31,14 @@ import {
   uid,
 } from "./utils";
 type Page = "home" | "loan" | "expense" | "saving" | "settings";
+type RecordType =
+  | "expenses"
+  | "importantExpenses"
+  | "fuelRecords"
+  | "repayments"
+  | "bankRecords"
+  | "savingRecords"
+  | "incomeRecords";
 type Drawer =
   | "expense"
   | "important"
@@ -84,6 +93,10 @@ export default function App() {
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [showAllTrends, setShowAllTrends] = useState(false);
   const [savingChannelId, setSavingChannelId] = useState("");
+  const [editing, setEditing] = useState<{
+    type: RecordType;
+    id: string;
+  } | null>(null);
   const [onboard, setOnboard] = useState(false);
   useEffect(() => {
     load().then((d) => {
@@ -329,6 +342,103 @@ export default function App() {
         ) as never;
       });
   };
+  const editRecord = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editing) return;
+    const f = new FormData(e.currentTarget),
+      note = String(f.get("note") || ""),
+      targetMonth = String(f.get("month")),
+      current = (
+        data[editing.type] as unknown as Array<Record<string, any>>
+      ).find((item) => item.id === editing.id);
+    if (!current) return;
+    const conflicts =
+      (editing.type === "expenses" &&
+        data.expenses.some(
+          (item) => item.id !== editing.id && item.month === targetMonth,
+        )) ||
+      (editing.type === "repayments" &&
+        data.repayments.some(
+          (item) =>
+            item.id !== editing.id &&
+            item.loanId === current.loanId &&
+            item.month === targetMonth,
+        )) ||
+      (editing.type === "bankRecords" &&
+        data.bankRecords.some(
+          (item) =>
+            item.id !== editing.id &&
+            item.bankId === String(f.get("bankId")) &&
+            item.month === targetMonth,
+        )) ||
+      (editing.type === "savingRecords" &&
+        data.savingRecords.some(
+          (item) =>
+            item.id !== editing.id &&
+            item.channelId === String(f.get("channelId")) &&
+            item.month === targetMonth,
+        ));
+    if (conflicts) {
+      alert("该月份已经有同类型记录，请编辑原记录或选择其他月份。");
+      return;
+    }
+    update((d) => {
+      const record = (
+        d[editing.type] as unknown as Array<Record<string, any>>
+      ).find((item) => item.id === editing.id);
+      if (!record) return;
+      record.month = targetMonth;
+      record.note = note;
+      if (editing.type === "expenses") record.amount = num(f.get("amount"));
+      if (editing.type === "importantExpenses") {
+        record.date = String(f.get("date") || "");
+        record.categoryId = String(f.get("categoryId"));
+        record.amount = num(f.get("amount"));
+        record.subject = String(f.get("subject"));
+      }
+      if (editing.type === "fuelRecords") {
+        record.date = String(f.get("date") || "");
+        record.tagId = String(f.get("tagId"));
+        record.amount = num(f.get("amount"));
+        record.times = num(f.get("times")) || undefined;
+      }
+      if (editing.type === "repayments") {
+        record.amount = num(f.get("amount"));
+        record.before = num(f.get("before"));
+        record.after = num(f.get("after"));
+        record.paid = f.get("paid") === "on";
+        record.paidDate = String(f.get("paidDate") || "");
+        const loan = d.loans.find((item) => item.id === record.loanId),
+          latest = d.repayments
+            .filter((item) => item.loanId === record.loanId && item.paid)
+            .sort((a, b) => b.month.localeCompare(a.month))[0];
+        if (loan && latest?.id === record.id) loan.current = record.after;
+      }
+      if (editing.type === "bankRecords") {
+        record.bankId = String(f.get("bankId"));
+        record.opening = num(f.get("opening"));
+        record.deposit = num(f.get("deposit"));
+        record.repayment = 0;
+        record.closing = record.opening + record.deposit;
+        record.manual = false;
+      }
+      if (editing.type === "savingRecords") {
+        record.channelId = String(f.get("channelId"));
+        record.opening = num(f.get("opening"));
+        record.added = num(f.get("added"));
+        record.reduced = num(f.get("reduced"));
+        record.manual = f.get("manual") === "on";
+        record.closing = record.manual
+          ? num(f.get("closing"))
+          : record.opening + record.added - record.reduced;
+      }
+      if (editing.type === "incomeRecords") {
+        record.sourceId = String(f.get("sourceId"));
+        record.amount = num(f.get("amount"));
+      }
+    });
+    setEditing(null);
+  };
   const backupDue =
     !data.lastBackupAt ||
     Date.now() - new Date(data.lastBackupAt).getTime() > 30 * 86400000;
@@ -381,6 +491,7 @@ export default function App() {
             month={month}
             open={setDrawer}
             remove={remove}
+            edit={(type, id) => setEditing({ type, id })}
           />
         )}{" "}
         {page === "expense" && (
@@ -389,6 +500,7 @@ export default function App() {
             month={month}
             open={setDrawer}
             remove={remove}
+            edit={(type, id) => setEditing({ type, id })}
           />
         )}{" "}
         {page === "saving" && (
@@ -401,6 +513,7 @@ export default function App() {
             }}
             openIncome={() => setDrawer("income")}
             remove={remove}
+            edit={(type, id) => setEditing({ type, id })}
           />
         )}{" "}
         {page === "settings" && <SettingsPage data={data} update={update} />}
@@ -626,6 +739,18 @@ export default function App() {
           </form>
         </Drawer>
       )}
+      {editing && (
+        <Drawer title="编辑历史记录" close={() => setEditing(null)}>
+          <EditRecordForm
+            type={editing.type}
+            record={(
+              data[editing.type] as unknown as Array<Record<string, any>>
+            ).find((item) => item.id === editing.id)}
+            categories={data.categories}
+            submit={editRecord}
+          />
+        </Drawer>
+      )}
       {onboard && (
         <Onboard
           data={data}
@@ -693,17 +818,21 @@ function Select({
   label,
   name,
   items,
+  value,
+  includeInactive = false,
 }: {
   label: string;
   name: string;
   items: { id: string; name: string }[];
+  value?: string;
+  includeInactive?: boolean;
 }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <select name={name}>
+      <select name={name} defaultValue={value}>
         {items
-          .filter((x: any) => x.active !== false)
+          .filter((x: any) => includeInactive || x.active !== false)
           .map((x) => (
             <option value={x.id} key={x.id}>
               {x.name}
@@ -711,6 +840,200 @@ function Select({
           ))}
       </select>
     </label>
+  );
+}
+
+function EditRecordForm({
+  type,
+  record,
+  categories,
+  submit,
+}: {
+  type: RecordType;
+  record?: Record<string, any>;
+  categories: AppData["categories"];
+  submit: (e: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  if (!record) return <p className="muted">这条记录已不存在</p>;
+  const categoryItems = (kind: CategoryKind) =>
+    categories
+      .filter((item) => item.kind === kind)
+      .sort((a, b) => a.order - b.order);
+  return (
+    <form onSubmit={submit} key={`${type}-${record.id}`}>
+      <Field
+        label="记录月份"
+        name="month"
+        type="month"
+        value={record.month}
+        required
+      />
+      {type === "importantExpenses" && (
+        <>
+          <Field label="事项" name="subject" value={record.subject} required />
+          <Field
+            label="日期（可选）"
+            name="date"
+            type="date"
+            value={record.date}
+          />
+          <Select
+            label="标签"
+            name="categoryId"
+            items={categoryItems("important")}
+            value={record.categoryId}
+            includeInactive
+          />
+        </>
+      )}
+      {type === "fuelRecords" && (
+        <>
+          <Field
+            label="加油日期（可选）"
+            name="date"
+            type="date"
+            value={record.date}
+          />
+          <Select
+            label="费用标签"
+            name="tagId"
+            items={categoryItems("fuel")}
+            value={record.tagId}
+            includeInactive
+          />
+          <Field
+            label="加油次数（可选）"
+            name="times"
+            type="number"
+            value={record.times}
+          />
+        </>
+      )}
+      {type === "repayments" && (
+        <>
+          <Field
+            label="还款前余额"
+            name="before"
+            type="number"
+            value={record.before}
+          />
+          <Field
+            label="还款后余额"
+            name="after"
+            type="number"
+            value={record.after}
+          />
+          <Field
+            label="实际还款日期（可选）"
+            name="paidDate"
+            type="date"
+            value={record.paidDate}
+          />
+          <label className="check">
+            <input name="paid" type="checkbox" defaultChecked={record.paid} />{" "}
+            已还款
+          </label>
+        </>
+      )}
+      {type === "bankRecords" && (
+        <>
+          <Select
+            label="银行卡"
+            name="bankId"
+            items={categoryItems("bank")}
+            value={record.bankId}
+            includeInactive
+          />
+          <Field
+            label="月初余额"
+            name="opening"
+            type="number"
+            value={record.opening}
+          />
+          <label className="field">
+            <span>本月转入 / 转出（转出请填负数）</span>
+            <input
+              name="deposit"
+              type="number"
+              step="0.01"
+              defaultValue={record.deposit}
+            />
+          </label>
+          <p className="formhint">
+            月末余额将按“月初余额 + 本月转入或转出”重新计算。
+          </p>
+        </>
+      )}
+      {type === "savingRecords" && (
+        <>
+          <Select
+            label="储蓄渠道"
+            name="channelId"
+            items={categoryItems("saving")}
+            value={record.channelId}
+            includeInactive
+          />
+          <Field
+            label="月初余额"
+            name="opening"
+            type="number"
+            value={record.opening}
+          />
+          <Field
+            label="本月新增"
+            name="added"
+            type="number"
+            value={record.added}
+          />
+          <Field
+            label="本月减少"
+            name="reduced"
+            type="number"
+            value={record.reduced}
+          />
+          <label className="check">
+            <input
+              name="manual"
+              type="checkbox"
+              defaultChecked={record.manual}
+            />{" "}
+            手动指定月末余额
+          </label>
+          <Field
+            label="手动月末余额"
+            name="closing"
+            type="number"
+            value={record.closing}
+          />
+        </>
+      )}
+      {type === "incomeRecords" && (
+        <Select
+          label="收入来源"
+          name="sourceId"
+          items={categoryItems("income")}
+          value={record.sourceId}
+          includeInactive
+        />
+      )}
+      {(type === "expenses" ||
+        type === "importantExpenses" ||
+        type === "fuelRecords" ||
+        type === "repayments" ||
+        type === "incomeRecords") && (
+        <Field
+          label="金额"
+          name="amount"
+          type="number"
+          value={record.amount}
+          required
+        />
+      )}
+      <Field label="备注（可选）" name="note" value={record.note} />
+      <button className="primary" type="submit">
+        保存修改
+      </button>
+    </form>
   );
 }
 function BalanceFields({
@@ -1213,11 +1536,13 @@ function LoanPage({
   month,
   open,
   remove,
+  edit,
 }: {
   data: AppData;
   month: string;
   open: (x: Drawer) => void;
   remove: any;
+  edit: (type: RecordType, id: string) => void;
 }) {
   const [showRepaymentDetails, setShowRepaymentDetails] = useState(false);
   const l = data.loans[0];
@@ -1335,6 +1660,13 @@ function LoanPage({
                     </div>
                     <strong>{money(record.amount)}</strong>
                     <button
+                      className="icon editicon"
+                      aria-label={`编辑${monthLabel(record.month)}还款记录`}
+                      onClick={() => edit("repayments", record.id)}
+                    >
+                      <Pencil />
+                    </button>
+                    <button
                       className="icon danger"
                       aria-label={`删除${monthLabel(record.month)}还款记录`}
                       onClick={() => remove("repayments", record.id)}
@@ -1363,6 +1695,7 @@ function LoanPage({
             type: "bankRecords",
           }))}
         remove={remove}
+        edit={edit}
       />
     </>
   );
@@ -1372,11 +1705,13 @@ function ExpensePage({
   month,
   open,
   remove,
+  edit,
 }: {
   data: AppData;
   month: string;
   open: (x: Drawer) => void;
   remove: any;
+  edit: (type: RecordType, id: string) => void;
 }) {
   const s = summary(data, month),
     year = month.slice(0, 4),
@@ -1418,6 +1753,7 @@ function ExpensePage({
             type: "expenses",
           }))}
         remove={remove}
+        edit={edit}
       />
       <List
         title="本月重要支出"
@@ -1433,6 +1769,7 @@ function ExpensePage({
             type: "importantExpenses",
           }))}
         remove={remove}
+        edit={edit}
       />
       <List
         title="本月加油记录"
@@ -1447,6 +1784,7 @@ function ExpensePage({
             type: "fuelRecords",
           }))}
         remove={remove}
+        edit={edit}
       />
     </>
   );
@@ -1457,12 +1795,14 @@ function SavingPage({
   openSaving,
   openIncome,
   remove,
+  edit,
 }: {
   data: AppData;
   month: string;
   openSaving: (channelId: string) => void;
   openIncome: () => void;
   remove: any;
+  edit: (type: RecordType, id: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const s = summary(data, month),
@@ -1554,6 +1894,13 @@ function SavingPage({
                     </small>
                   </div>
                   <strong>{money(record.closing)}</strong>
+                  <button
+                    className="icon editicon"
+                    aria-label={`编辑${monthLabel(record.month)}储蓄记录`}
+                    onClick={() => edit("savingRecords", record.id)}
+                  >
+                    <Pencil />
+                  </button>
                   <button
                     className="icon danger"
                     aria-label={`删除${monthLabel(record.month)}记录`}
@@ -1671,6 +2018,13 @@ function SavingPage({
                 </div>
                 <strong>{money(record.amount)}</strong>
                 <button
+                  className="icon editicon"
+                  aria-label="编辑收入记录"
+                  onClick={() => edit("incomeRecords", record.id)}
+                >
+                  <Pencil />
+                </button>
+                <button
                   className="icon danger"
                   aria-label="删除收入记录"
                   onClick={() => remove("incomeRecords", record.id)}
@@ -1700,6 +2054,7 @@ function List({
   title,
   rows,
   remove,
+  edit,
 }: {
   title: string;
   rows: {
@@ -1710,6 +2065,7 @@ function List({
     type: string;
   }[];
   remove: (t: any, id: string) => void;
+  edit: (type: RecordType, id: string) => void;
 }) {
   return (
     <section className="list">
@@ -1722,6 +2078,13 @@ function List({
               <small>{r.sub}</small>
             </div>
             <strong>{money(r.amount)}</strong>
+            <button
+              className="icon editicon"
+              aria-label={`编辑${r.main}`}
+              onClick={() => edit(r.type as RecordType, r.id)}
+            >
+              <Pencil />
+            </button>
             {r.type !== "savingRecords" && (
               <button
                 className="icon danger"
