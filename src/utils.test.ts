@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emptyData, ensureHistoricalLoanRepayments } from "./db";
 import {
   fundingSegments,
+  monthForDate,
   monthRange,
   num,
   shiftMonth,
@@ -9,6 +10,10 @@ import {
   uid,
 } from "./utils";
 describe("month logic", () => {
+  it("assigns a dated record to the date's month", () => {
+    expect(monthForDate("2026-09", "2026-07-31")).toBe("2026-07");
+    expect(monthForDate("2026-09", "")).toBe("2026-09");
+  });
   it("crosses year boundaries", () =>
     expect(shiftMonth("2027-01", -1)).toBe("2026-12"));
   it("accepts negative bank movements", () =>

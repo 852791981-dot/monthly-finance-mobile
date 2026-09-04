@@ -24,6 +24,7 @@ import {
   money,
   monthRange,
   monthLabel,
+  monthForDate,
   monthsBack,
   num,
   shiftMonth,
@@ -118,27 +119,32 @@ export default function App() {
       data.categories
         .filter((x) => x.kind === k)
         .sort((a, b) => a.order - b.order),
-    latest = (kind: "saving" | "bank", id: string) => {
+    latest = (kind: "saving" | "bank", id: string, beforeMonth = month) => {
       const arr =
         kind === "saving"
           ? data.savingRecords.filter((x) => x.channelId === id)
           : data.bankRecords.filter((x) => x.bankId === id);
       return (
         arr
-          .filter((x) => x.month < month)
+          .filter((x) => x.month < beforeMonth)
           .sort((a, b) => b.month.localeCompare(a.month))[0]?.closing || 0
       );
     };
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget),
-      note = String(f.get("note") || "");
+      note = String(f.get("note") || ""),
+      chosenMonth = String(f.get("recordMonth") || month),
+      datedMonth =
+        drawer === "fuel" || drawer === "important" || drawer === "loan"
+          ? monthForDate(chosenMonth, String(f.get("date") || ""))
+          : chosenMonth;
     update((d) => {
       if (drawer === "expense") {
-        d.expenses = d.expenses.filter((x) => x.month !== month);
+        d.expenses = d.expenses.filter((x) => x.month !== datedMonth);
         d.expenses.push({
           id: uid(),
-          month,
+          month: datedMonth,
           amount: num(f.get("amount")),
           note,
         });
@@ -146,7 +152,7 @@ export default function App() {
       if (drawer === "fuel") {
         d.fuelRecords.push({
           id: uid(),
-          month,
+          month: datedMonth,
           date: String(f.get("date") || ""),
           amount: num(f.get("amount")),
           tagId: String(f.get("tagId") || ""),
@@ -156,7 +162,7 @@ export default function App() {
       if (drawer === "important")
         d.importantExpenses.push({
           id: uid(),
-          month,
+          month: datedMonth,
           date: String(f.get("date") || ""),
           categoryId: String(f.get("categoryId")),
           amount: num(f.get("amount")),
@@ -169,12 +175,12 @@ export default function App() {
           before = num(f.get("before"));
         const after = num(f.get("after"));
         d.repayments = d.repayments.filter(
-          (x) => !(x.month === month && x.loanId === loan.id),
+          (x) => !(x.month === datedMonth && x.loanId === loan.id),
         );
         d.repayments.push({
           id: uid(),
           loanId: loan.id,
-          month,
+          month: datedMonth,
           amount,
           before,
           after,
@@ -286,12 +292,12 @@ export default function App() {
           manual = false,
           closing = opening + deposit;
         d.bankRecords = d.bankRecords.filter(
-          (x) => !(x.month === month && x.bankId === id),
+          (x) => !(x.month === datedMonth && x.bankId === id),
         );
         d.bankRecords.push({
           id: uid(),
           bankId: id,
-          month,
+          month: datedMonth,
           opening,
           deposit,
           repayment,
@@ -308,12 +314,12 @@ export default function App() {
           manual = f.get("manual") === "on",
           closing = manual ? num(f.get("closing")) : opening + added - reduced;
         d.savingRecords = d.savingRecords.filter(
-          (x) => !(x.month === month && x.channelId === id),
+          (x) => !(x.month === datedMonth && x.channelId === id),
         );
         d.savingRecords.push({
           id: uid(),
           channelId: id,
-          month,
+          month: datedMonth,
           opening,
           added,
           reduced,
@@ -325,7 +331,7 @@ export default function App() {
       if (drawer === "income") {
         d.incomeRecords.push({
           id: uid(),
-          month,
+          month: datedMonth,
           sourceId: String(f.get("sourceId")),
           amount: num(f.get("amount")),
           note,
@@ -333,6 +339,7 @@ export default function App() {
       }
     });
     setDrawer(null);
+    if (datedMonth !== month) setMonth(datedMonth);
   };
   const remove = (type: keyof AppData, id: string) => {
     if (confirm("确定删除这条记录吗？此操作不可撤销。"))
@@ -347,7 +354,19 @@ export default function App() {
     if (!editing) return;
     const f = new FormData(e.currentTarget),
       note = String(f.get("note") || ""),
-      targetMonth = String(f.get("month")),
+      selectedMonth = String(f.get("month")),
+      targetMonth =
+        editing.type === "fuelRecords" ||
+        editing.type === "importantExpenses" ||
+        editing.type === "repayments"
+          ? monthForDate(
+              selectedMonth,
+              String(
+                f.get(editing.type === "repayments" ? "paidDate" : "date") ||
+                  "",
+              ),
+            )
+          : selectedMonth,
       current = (
         data[editing.type] as unknown as Array<Record<string, any>>
       ).find((item) => item.id === editing.id);
@@ -438,6 +457,7 @@ export default function App() {
       }
     });
     setEditing(null);
+    if (targetMonth !== month) setMonth(targetMonth);
   };
   const backupDue =
     !data.lastBackupAt ||
@@ -556,6 +576,19 @@ export default function App() {
           close={() => setDrawer(null)}
         >
           <form onSubmit={submit}>
+            {(drawer === "expense" ||
+              drawer === "important" ||
+              drawer === "fuel" ||
+              drawer === "loan" ||
+              drawer === "income") && (
+              <Field
+                label="记录月份"
+                name="recordMonth"
+                type="month"
+                value={month}
+                required
+              />
+            )}
             {drawer === "important" && (
               <>
                 <Field label="事项" name="subject" required />
@@ -602,6 +635,7 @@ export default function App() {
                 kind={drawer}
                 items={cats(drawer)}
                 latest={latest}
+                month={month}
                 selectedId={drawer === "saving" ? savingChannelId : undefined}
               />
             )}{" "}
@@ -1040,22 +1074,43 @@ function BalanceFields({
   kind,
   items,
   latest,
+  month,
   selectedId,
 }: {
   kind: "saving" | "bank";
   items: any[];
-  latest: (k: "saving" | "bank", id: string) => number;
+  latest: (k: "saving" | "bank", id: string, beforeMonth?: string) => number;
+  month: string;
   selectedId?: string;
 }) {
   const firstId = selectedId || items.find((x) => x.active)?.id || "";
   const [id, setId] = useState(firstId);
+  const [recordMonth, setRecordMonth] = useState(month);
   const [bankOpening, setBankOpening] = useState(
-    String(latest("bank", firstId)),
+    String(latest("bank", firstId, month)),
+  );
+  const [savingOpening, setSavingOpening] = useState(
+    String(latest("saving", firstId, month)),
   );
   const [bankMovement, setBankMovement] = useState("0");
+  const changeMonth = (nextMonth: string) => {
+    setRecordMonth(nextMonth);
+    if (kind === "bank") setBankOpening(String(latest("bank", id, nextMonth)));
+    else setSavingOpening(String(latest("saving", id, nextMonth)));
+  };
   if (kind === "bank") {
     return (
       <>
+        <label className="field">
+          <span>记录月份</span>
+          <input
+            name="recordMonth"
+            type="month"
+            required
+            value={recordMonth}
+            onChange={(e) => changeMonth(e.target.value)}
+          />
+        </label>
         <label className="field">
           <span>银行卡</span>
           <select
@@ -1064,7 +1119,7 @@ function BalanceFields({
             onChange={(e) => {
               const nextId = e.target.value;
               setId(nextId);
-              setBankOpening(String(latest("bank", nextId)));
+              setBankOpening(String(latest("bank", nextId, recordMonth)));
               setBankMovement("0");
             }}
           >
@@ -1111,6 +1166,16 @@ function BalanceFields({
   }
   return (
     <>
+      <label className="field">
+        <span>记录月份</span>
+        <input
+          name="recordMonth"
+          type="month"
+          required
+          value={recordMonth}
+          onChange={(e) => changeMonth(e.target.value)}
+        />
+      </label>
       {selectedId ? (
         <div className="selectedchannel">
           <span>正在更新</span>
@@ -1123,7 +1188,11 @@ function BalanceFields({
           <select
             name="channelId"
             value={id}
-            onChange={(e) => setId(e.target.value)}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setId(nextId);
+              setSavingOpening(String(latest("saving", nextId, recordMonth)));
+            }}
           >
             {items
               .filter((x) => x.active)
@@ -1135,12 +1204,17 @@ function BalanceFields({
           </select>
         </label>
       )}
-      <Field
-        label="月初余额（自动延续）"
-        name="opening"
-        type="number"
-        value={latest(kind, id)}
-      />
+      <label className="field">
+        <span>月初余额（自动延续）</span>
+        <input
+          name="opening"
+          type="number"
+          min="0"
+          step="0.01"
+          value={savingOpening}
+          onChange={(e) => setSavingOpening(e.target.value)}
+        />
+      </label>
       <Field label="本月新增" name="added" type="number" />
       <Field label="本月减少" name="reduced" type="number" />
       <label className="check">

@@ -28,6 +28,10 @@ export const monthRange = (start: string, end: string) => {
 };
 export const num = (v: FormDataEntryValue | null) =>
   Math.round((Number(v) || 0) * 100) / 100;
+export const monthForDate = (fallbackMonth: Month, date?: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(date || "")
+    ? String(date).slice(0, 7)
+    : fallbackMonth;
 export function fundingSegments(
   total: number,
   paid: number,
