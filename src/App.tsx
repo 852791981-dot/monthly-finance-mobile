@@ -576,19 +576,6 @@ export default function App() {
           close={() => setDrawer(null)}
         >
           <form onSubmit={submit}>
-            {(drawer === "expense" ||
-              drawer === "important" ||
-              drawer === "fuel" ||
-              drawer === "loan" ||
-              drawer === "income") && (
-              <Field
-                label="记录月份"
-                name="recordMonth"
-                type="month"
-                value={month}
-                required
-              />
-            )}
             {drawer === "important" && (
               <>
                 <Field label="事项" name="subject" required />
@@ -895,13 +882,7 @@ function EditRecordForm({
       .sort((a, b) => a.order - b.order);
   return (
     <form onSubmit={submit} key={`${type}-${record.id}`}>
-      <Field
-        label="记录月份"
-        name="month"
-        type="month"
-        value={record.month}
-        required
-      />
+      <input type="hidden" name="month" value={record.month} />
       {type === "importantExpenses" && (
         <>
           <Field label="事项" name="subject" value={record.subject} required />
@@ -1085,7 +1066,6 @@ function BalanceFields({
 }) {
   const firstId = selectedId || items.find((x) => x.active)?.id || "";
   const [id, setId] = useState(firstId);
-  const [recordMonth, setRecordMonth] = useState(month);
   const [bankOpening, setBankOpening] = useState(
     String(latest("bank", firstId, month)),
   );
@@ -1093,24 +1073,9 @@ function BalanceFields({
     String(latest("saving", firstId, month)),
   );
   const [bankMovement, setBankMovement] = useState("0");
-  const changeMonth = (nextMonth: string) => {
-    setRecordMonth(nextMonth);
-    if (kind === "bank") setBankOpening(String(latest("bank", id, nextMonth)));
-    else setSavingOpening(String(latest("saving", id, nextMonth)));
-  };
   if (kind === "bank") {
     return (
       <>
-        <label className="field">
-          <span>记录月份</span>
-          <input
-            name="recordMonth"
-            type="month"
-            required
-            value={recordMonth}
-            onChange={(e) => changeMonth(e.target.value)}
-          />
-        </label>
         <label className="field">
           <span>银行卡</span>
           <select
@@ -1119,7 +1084,7 @@ function BalanceFields({
             onChange={(e) => {
               const nextId = e.target.value;
               setId(nextId);
-              setBankOpening(String(latest("bank", nextId, recordMonth)));
+              setBankOpening(String(latest("bank", nextId, month)));
               setBankMovement("0");
             }}
           >
@@ -1166,16 +1131,6 @@ function BalanceFields({
   }
   return (
     <>
-      <label className="field">
-        <span>记录月份</span>
-        <input
-          name="recordMonth"
-          type="month"
-          required
-          value={recordMonth}
-          onChange={(e) => changeMonth(e.target.value)}
-        />
-      </label>
       {selectedId ? (
         <div className="selectedchannel">
           <span>正在更新</span>
@@ -1191,7 +1146,7 @@ function BalanceFields({
             onChange={(e) => {
               const nextId = e.target.value;
               setId(nextId);
-              setSavingOpening(String(latest("saving", nextId, recordMonth)));
+              setSavingOpening(String(latest("saving", nextId, month)));
             }}
           >
             {items
